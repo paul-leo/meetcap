@@ -1,25 +1,32 @@
-// meetcap demo — UI wiring. Consumes meetcap-detector + meetcap-recorder via
-// their renderer entries (which talk to the main process over window.meetcap).
+// meetcap demo — UI wiring. Consumes meetcap-renderer (detector client +
+// recorder), which talks to the main process (meetcap-main) over window.meetcap.
 
 // Connect the harness-fe runtime to the local solo gateway so an AI agent can
 // inspect/drive this window over MCP (console at http://127.0.0.1:47620/console).
 // Port 47620 is meetcap's own — keeps the gateway off harness's default 47729 and
-// any other dev server. Solo mode is loopback + tokenless, so this example just
-// always instruments. Keep behind a flag if you copy this into a shipping app.
-;(window as unknown as { __HARNESS_FE__?: unknown }).__HARNESS_FE__ = {
-  projectId: 'meetcap-demo',
-  mcpUrl: 'ws://127.0.0.1:47620/ws',
-  overlay: true,
+// any other dev server. Solo mode is loopback + tokenless.
+//
+// Gated behind a build-time flag (`__HARNESS_ENABLED__`, injected by esbuild):
+// the dev build (`npm start`) instruments; the packaged build (`npm run dist`)
+// strips it so the shipped app never reaches for a localhost gateway.
+declare const __HARNESS_ENABLED__: boolean
+if (__HARNESS_ENABLED__) {
+  ;(window as unknown as { __HARNESS_FE__?: unknown }).__HARNESS_FE__ = {
+    projectId: 'meetcap-demo',
+    mcpUrl: 'ws://127.0.0.1:47620/ws',
+    overlay: true,
+    consent: 'off', // loopback dev only: let the MCP agent drive the window without a prompt
+  }
+  void import('@harness-fe/runtime')
 }
-void import('@harness-fe/runtime')
 
-import { createDetectorClient } from 'meetcap-detector/renderer'
 import {
+  createDetectorClient,
   createRecorder,
   listInterruptedRecordings,
   requestPermissions,
   openScreenRecordingSettings,
-} from 'meetcap-recorder-renderer'
+} from 'meetcap-renderer'
 import type { MeetingInfo } from 'meetcap-core'
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement
@@ -63,35 +70,79 @@ function hideBanner() {
   $('banner').classList.remove('show')
   setPill($('det-state'), 'no meeting')
 }
+// Timer that excludes paused time: track start + accumulated paused span, mirroring
+// the recorder's own duration accounting so the UI clock matches the saved file.
+let recStart = 0
+let recPausedAccum = 0
+let recPausedAt = 0
+function renderTimer() {
+  const openPause = recPausedAt ? Date.now() - recPausedAt : 0
+  const s = Math.floor((Date.now() - recStart - recPausedAccum - openPause) / 1000)
+  $('rec-timer').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
 function enterRecordingUI() {
   $('banner-idle-text').style.display = 'none'
   $('banner-rec-text').style.display = ''
   $('btn-start').style.display = 'none'
   $('btn-dismiss').style.display = 'none'
+  $('btn-pause').style.display = ''
+  $('btn-resume').style.display = 'none'
   $('btn-stop-banner').style.display = ''
-  const start = Date.now()
-  recTimer = setInterval(() => {
-    const s = Math.floor((Date.now() - start) / 1000)
-    $('rec-timer').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-  }, 500)
+  $('rec-label').textContent = 'Recording…'
+  $('rec-dot').classList.remove('paused')
+  recStart = Date.now()
+  recPausedAccum = 0
+  recPausedAt = 0
+  if (recTimer) clearInterval(recTimer)
+  recTimer = setInterval(renderTimer, 500)
+}
+function enterPausedUI() {
+  if (recPausedAt === 0) recPausedAt = Date.now()
+  if (recTimer) { clearInterval(recTimer); recTimer = null }
+  renderTimer()
+  $('btn-pause').style.display = 'none'
+  $('btn-resume').style.display = ''
+  $('rec-label').textContent = 'Paused'
+  $('rec-dot').classList.add('paused')
+}
+function resumeRecordingUI() {
+  if (recPausedAt) { recPausedAccum += Date.now() - recPausedAt; recPausedAt = 0 }
+  $('btn-pause').style.display = ''
+  $('btn-resume').style.display = 'none'
+  $('rec-label').textContent = 'Recording…'
+  $('rec-dot').classList.remove('paused')
+  if (recTimer) clearInterval(recTimer)
+  recTimer = setInterval(renderTimer, 500)
 }
 function exitRecordingUI() {
   if (recTimer) { clearInterval(recTimer); recTimer = null }
+  recPausedAt = 0
+  recPausedAccum = 0
   $('banner-idle-text').style.display = ''
   $('banner-rec-text').style.display = 'none'
   $('btn-start').style.display = ''
   $('btn-dismiss').style.display = ''
+  $('btn-pause').style.display = 'none'
+  $('btn-resume').style.display = 'none'
   $('btn-stop-banner').style.display = 'none'
 }
 
 // ── recorder events ───────────────────────────────────────────────────────────
+let prevState: 'idle' | 'recording' | 'paused' = 'idle'
 recorder.on('statechange', (s) => {
   log(`recorder: ${s}`)
-  if (s === 'recording') enterRecordingUI()
-  else exitRecordingUI()
+  if (s === 'recording') {
+    if (prevState === 'paused') resumeRecordingUI()
+    else enterRecordingUI()
+  } else if (s === 'paused') {
+    enterPausedUI()
+  } else {
+    exitRecordingUI()
+  }
+  prevState = s
   // Reflect state on the standalone record button too.
   ;($('btn-record') as HTMLButtonElement).textContent =
-    s === 'recording' ? '■ Stop recording' : '● Record now'
+    s === 'recording' ? '■ Stop recording' : s === 'paused' ? '▶ Resume recording' : '● Record now'
 })
 recorder.on('error', (e) => log('ERROR: ' + ((e as Error)?.message || String(e))))
 
@@ -128,7 +179,9 @@ recorder.on('complete', (result) => {
 
 // ── detector events ───────────────────────────────────────────────────────────
 detector.on('meeting-detected', (m) => {
-  log(`meeting-detected: ${m.app} — "${m.windowName}" (process: ${m.process ?? 'n/a'})`)
+  // Detected by window (rich title) or by meeting-process (minimized/hidden window).
+  const via = m.windowName ? `window "${m.windowName}"` : `process "${m.process ?? 'n/a'}"`
+  log(`meeting-detected: ${m.app} (via ${via})`)
   showBanner(m)
 })
 detector.on('meeting-ended', () => {
@@ -147,10 +200,15 @@ function startRecording() {
   resumeKey = null
 }
 $('btn-start').onclick = () => startRecording()
+$('btn-pause').onclick = () => recorder.pause()
+$('btn-resume').onclick = () => recorder.resume()
 $('btn-stop-banner').onclick = () => recorder.stop()
 $('btn-dismiss').onclick = () => hideBanner()
-$('btn-record').onclick = () =>
-  recorder.state === 'recording' ? recorder.stop() : startRecording()
+$('btn-record').onclick = () => {
+  if (recorder.state === 'recording') recorder.stop()
+  else if (recorder.state === 'paused') recorder.resume()
+  else startRecording()
+}
 $('btn-list').onclick = async () => {
   const wins = await window.meetcap.listWindows()
   log(`--- ${wins.length} sources ---`)

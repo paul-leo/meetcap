@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import { pickMimeType, buildFilename } from './util'
+import { pickMimeType, buildFilename, computeDuration } from './util'
+
+describe('computeDuration', () => {
+  it('is wall-clock when never paused', () => {
+    expect(computeDuration(1000, 6000, 0, null)).toBe(5000)
+  })
+  it('subtracts finished pauses', () => {
+    // recorded 1000→6000 (5s), but 2s of that was paused
+    expect(computeDuration(1000, 6000, 2000, null)).toBe(3000)
+  })
+  it('subtracts an in-progress pause too', () => {
+    // paused at 4000, now 6000 → 2s open pause excluded
+    expect(computeDuration(1000, 6000, 0, 4000)).toBe(3000)
+  })
+  it('combines finished and in-progress pauses', () => {
+    expect(computeDuration(1000, 10000, 2000, 8000)).toBe(5000) // 9s - 2s - 2s
+  })
+  it('never goes negative', () => {
+    expect(computeDuration(1000, 1000, 5000, null)).toBe(0)
+  })
+})
 
 describe('pickMimeType', () => {
   it('prefers opus when supported', () => {

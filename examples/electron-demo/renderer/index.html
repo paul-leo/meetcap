@@ -25,13 +25,14 @@
     audio { width: 100%; margin-top: 8px; }
     .k { color: #8b8d98; }
     .rec-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f5564a; margin-right: 6px; animation: blink 1s infinite; }
+    .rec-dot.paused { animation: none; background: #f5c451; }
     @keyframes blink { 50% { opacity: .25; } }
   </style>
 </head>
 <body>
   <header>
     <h1>meetcap demo</h1>
-    <div class="sub">Detect a meeting → capture mic + system audio → record → save. Powered by meetcap-detector + meetcap-recorder.</div>
+    <div class="sub">Detect a meeting → capture mic + system audio → record → save. Powered by meetcap-main + meetcap-renderer.</div>
   </header>
 
   <main>
@@ -51,9 +52,11 @@
 
     <div id="banner" class="card">
       <div id="banner-idle-text"><strong id="banner-app">Meeting</strong> detected — record this call?</div>
-      <div id="banner-rec-text" style="display:none"><span class="rec-dot"></span> Recording… <span id="rec-timer" class="k">0:00</span></div>
+      <div id="banner-rec-text" style="display:none"><span id="rec-dot" class="rec-dot"></span> <span id="rec-label">Recording…</span> <span id="rec-timer" class="k">0:00</span></div>
       <div class="row">
         <button id="btn-start">Start recording</button>
+        <button id="btn-pause" class="ghost" style="display:none">⏸ Pause</button>
+        <button id="btn-resume" style="display:none">▶ Resume</button>
         <button id="btn-stop-banner" style="display:none">Stop &amp; save</button>
         <button id="btn-dismiss" class="ghost">Dismiss</button>
       </div>

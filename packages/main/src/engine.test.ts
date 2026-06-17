@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { matchWindow, matchProcess, resolveMeeting, createDetectionState } from './engine'
+import {
+  matchWindow,
+  matchProcess,
+  matchMeetingProcess,
+  resolveMeeting,
+  createDetectionState,
+} from './engine'
 import { presets } from './rules'
 import type { MeetingRule } from 'meetcap-core'
 
@@ -39,6 +45,21 @@ describe('matchProcess', () => {
   })
 })
 
+describe('matchMeetingProcess', () => {
+  it('matches Zoom meeting-only helpers (CptHost / aomhost)', () => {
+    expect(matchMeetingProcess([proc('CptHost')], presets)?.rule.id).toBe('zoom')
+    expect(matchMeetingProcess([proc('aomhost')], presets)?.rule.id).toBe('zoom')
+  })
+
+  it('does NOT match the always-on app process (zoom.us) — app open ≠ in a meeting', () => {
+    expect(matchMeetingProcess([proc('zoom.us')], presets)).toBeNull()
+  })
+
+  it('skips rules without meetingProcess', () => {
+    expect(matchMeetingProcess([proc('Teams'), proc('wemeetapp')], presets)).toBeNull()
+  })
+})
+
 describe('resolveMeeting', () => {
   it('window policy: title alone is enough, process attached as cue', () => {
     const m = resolveMeeting([win('Zoom会议')], [proc('zoom.us')], { require: 'window' })
@@ -55,6 +76,35 @@ describe('resolveMeeting', () => {
   it('window+process policy: requires both of the same rule', () => {
     expect(resolveMeeting([win('Zoom会议')], [proc('Finder')], { require: 'window+process' })).toBeNull()
     expect(resolveMeeting([win('Zoom会议')], [proc('zoom.us')], { require: 'window+process' })?.id).toBe('zoom')
+  })
+
+  it('process policy: meeting-only process detects with NO window (minimized/hidden)', () => {
+    const m = resolveMeeting([], [proc('CptHost')], { require: 'process' })
+    expect(m?.id).toBe('zoom')
+    expect(m?.process).toBe('CptHost')
+    expect(m?.windowName).toBeUndefined()
+  })
+
+  it('process policy: app open but not in a meeting (zoom.us only) → null', () => {
+    expect(resolveMeeting([], [proc('zoom.us')], { require: 'process' })).toBeNull()
+  })
+
+  it('either policy (default): survives a minimized window via meeting process', () => {
+    // window gone, but CptHost alive → still detected
+    const m = resolveMeeting([], [proc('CptHost')])
+    expect(m?.id).toBe('zoom')
+    expect(m?.process).toBe('CptHost')
+  })
+
+  it('either policy: window present is preferred for metadata (windowName kept)', () => {
+    const m = resolveMeeting([win('Zoom会议')], [proc('CptHost')])
+    expect(m?.id).toBe('zoom')
+    expect(m?.windowName).toBe('Zoom会议')
+    expect(m?.process).toBe('CptHost')
+  })
+
+  it('either policy: app open, no meeting (zoom.us only, no window) → null', () => {
+    expect(resolveMeeting([], [proc('zoom.us')])).toBeNull()
   })
 
   it('supports a fully custom rule', () => {

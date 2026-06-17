@@ -14,8 +14,13 @@ export function toMatcher(
 
 /**
  * Built-in rules for the common native meeting clients. Window-title patterns
- * are the "in a meeting" signal; process patterns corroborate the match.
+ * are the precise "in a meeting" signal; `meetingProcess` is the robust one
+ * (survives a minimized/hidden window); `process` corroborates / is a cue.
  * Localized titles are covered (e.g. "Zoom会议", "腾讯会议").
+ *
+ * `meetingProcess` is only set where a meeting-scoped helper process is known
+ * (Zoom). Other clients detect by window until their meeting-only process names
+ * are confirmed — add `meetingProcess` to opt them into process detection.
  *
  * Browser-based meetings (Google Meet / Zoom Web in a tab) are intentionally
  * not reliably covered — see the root README "Known limitations".
@@ -26,6 +31,9 @@ export const presets: MeetingRule[] = [
     app: 'Zoom',
     window: [/zoom\s*meeting/i, /zoom\s*会议/i],
     process: [/zoom\.us/i, /\bzoom\b/i, /CptHost/i],
+    // Meeting-only helpers: spawned for a call, gone when it ends (not when the
+    // app is merely open — that's `zoom.us`). Robust to a minimized window.
+    meetingProcess: [/CptHost/i, /aomhost/i, /caphost/i],
   },
   {
     id: 'teams',

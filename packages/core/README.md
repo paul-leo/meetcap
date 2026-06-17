@@ -1,6 +1,6 @@
 # meetcap-core
 
-Shared TypeScript types and the IPC contract for [`meetcap-detector`](../detector) and [`meetcap-recorder`](../recorder). Dependency-free — safe to import from any process.
+Shared TypeScript types and the IPC contract for [`meetcap-main`](../main) and [`meetcap-renderer`](../renderer). Dependency-free — safe to import from any process.
 
 ## Install
 
@@ -24,7 +24,7 @@ import { exposeMeetcapBridge } from 'meetcap-core/preload'
 exposeMeetcapBridge(contextBridge, ipcRenderer) // → window.meetcap
 ```
 
-`window.meetcap` then exposes `detectOnce`, `onDetectorEvent`, `listWindows`, `mediaAccess`, `saveRecording`, `enableLoopbackAudio`, `disableLoopbackAudio` — consumed by the renderer halves of the detector/recorder packages.
+`window.meetcap` then exposes `detectOnce`, `onDetectorEvent`, `listWindows`, `mediaAccess`, `openRecording` / `writeRecordingChunk` / `closeRecording`, `enableLoopbackAudio`, `disableLoopbackAudio` — consumed by `meetcap-renderer`.
 
 ## License
 

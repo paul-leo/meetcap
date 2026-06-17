@@ -3,7 +3,7 @@
  * BEFORE `app.whenReady()` — `initMain()` appends Chromium feature flags that
  * must be set before the app initializes:
  *
- *   import { initRecorderMain } from 'meetcap-recorder-main'
+ *   import { initRecorderMain } from 'meetcap-main'
  *   initRecorderMain()
  *
  * It (1) injects the macOS loopback feature flags + registers the

@@ -1,5 +1,5 @@
 /**
- * meetcap-core — shared types and IPC contract for meetcap-detector / meetcap-recorder.
+ * meetcap-core — shared types and IPC contract for meetcap-main / meetcap-renderer.
  *
  * This package is dependency-free (no electron import) so types can be consumed
  * from any process. The preload bridge helper lives in `meetcap-core/preload`.
@@ -32,6 +32,18 @@ export interface MeetingRule {
   window?: Array<RegExp | string> | ((title: string) => boolean)
   /** Process-name matchers, same semantics as `window`. */
   process?: Array<RegExp | string> | ((name: string) => boolean)
+  /**
+   * Processes that exist ONLY while a meeting is active — not when the client is
+   * merely open (e.g. Zoom's `CptHost` / `aomhost`, spawned for a call and torn
+   * down when it ends). Same matcher semantics as `window`.
+   *
+   * This is the strong "in a meeting" signal for the `'process'` and `'either'`
+   * policies: it survives the meeting window being minimized/hidden (when
+   * `desktopCapturer` can't see the title). A rule with no `meetingProcess` is
+   * never detected by process — it relies on window detection only, so put
+   * *meeting-scoped* helper names here, never the always-on app process.
+   */
+  meetingProcess?: Array<RegExp | string> | ((name: string) => boolean)
 }
 
 /** A window/screen source as enumerated by desktopCapturer. */

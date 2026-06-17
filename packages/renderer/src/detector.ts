@@ -2,7 +2,7 @@
  * Renderer-side detector client. Subscribes to the main-process broadcast and
  * re-exposes it as a small framework-agnostic event emitter.
  *
- *   import { createDetectorClient } from 'meetcap-detector/renderer'
+ *   import { createDetectorClient } from 'meetcap-renderer'
  *   const detector = createDetectorClient()
  *   detector.on('meeting-detected', (m) => console.log('in', m.app))
  *   detector.on('meeting-ended', () => console.log('out'))

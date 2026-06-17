@@ -3,7 +3,7 @@
  * (process names) on an interval, runs the rule engine, and broadcasts
  * detected/ended edge events to all renderer windows over IPC.
  *
- *   import { startDetector } from 'meetcap-detector/main'
+ *   import { startDetector } from 'meetcap-main'
  *   const detector = startDetector({ require: 'window' })
  *   // …later: detector.stop()
  */
@@ -45,11 +45,14 @@ export function startDetector(opts: StartDetectorOptions = {}): Detector {
   const rules = opts.rules ?? presets
   const state = createDetectionState()
 
+  const policy = opts.require ?? 'either'
+
   async function detectOnce(): Promise<MeetingInfo | null> {
     const sources = await listWindowSources()
-    // Cheap pre-check: only enumerate processes when a window already matched —
-    // avoids running ps-list every tick while idle.
-    if (!matchWindow(sources, rules)) return null
+    // 'window' can early-out cheaply (skip ps-list while idle). Process-aware
+    // policies must enumerate processes so a minimized/hidden meeting still
+    // registers via its meeting-only process.
+    if (policy === 'window' && !matchWindow(sources, rules)) return null
     const procs = await listProcesses()
     return resolveMeeting(sources, procs, opts)
   }

@@ -1,0 +1,39 @@
+appId: ai.meetcap.demo
+productName: meetcap
+copyright: meetcap (MIT)
+
+directories:
+  output: dist
+  buildResources: build
+
+# The renderer is pre-bundled into renderer/bundle.js by `npm run build:dist`.
+# Workspace deps (meetcap-*) are symlinked by pnpm; electron-builder dereferences
+# them and bundles their published `dist` (so run `turbo build` first).
+files:
+  - main.js
+  - preload.js
+  - renderer/index.html
+  - renderer/bundle.js
+  - package.json
+  - "!**/*.map"
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.productivity
+  icon: build/icon.png
+  # Recording reaches for mic + screen. macOS requires a usage string for the
+  # mic or the app crashes on first getUserMedia; screen recording is granted via
+  # System Settings on first capture.
+  extendInfo:
+    NSMicrophoneUsageDescription: meetcap records your microphone for the meeting capture demo.
+    NSCameraUsageDescription: meetcap does not use the camera; getDisplayMedia requires this key to be present.
+  # Unsigned local build: skip the hardened runtime so an ad-hoc signature is
+  # enough to launch (right-click → Open on first run). For distribution, add a
+  # Developer ID identity + notarization (see README "Download / Install").
+  identity: null
+
+dmg:
+  title: meetcap ${version}

@@ -8,8 +8,8 @@ before integrating, read this one.
 
 | Layer | Package | Process | Responsibility |
 |---|---|---|---|
-| Detector | `meetcap-detector` | main poll → renderer client | Is a meeting in progress? Emits `meeting-detected` / `meeting-ended`. |
-| Recorder | `meetcap-recorder-renderer` (+ `-main`) | renderer capture + main disk | Capture mic + system audio, stream to disk, emit `chunk` / `complete`. |
+| Detector | `meetcap-main` poll → `meetcap-renderer` client | main → renderer | Is a meeting in progress? Emits `meeting-detected` / `meeting-ended`. |
+| Recorder | `meetcap-renderer` (+ `meetcap-main`) | renderer capture + main disk | Capture mic + system audio, stream to disk, emit `chunk` / `complete`. |
 | Bridge | `meetcap-core` | preload | `window.meetcap` IPC surface tying the two halves together. |
 
 ## Lifecycle at a glance
@@ -27,10 +27,9 @@ The two events that matter most: **`meeting-detected` to begin, `meeting-ended` 
 
 ```ts
 // main.ts — BEFORE app.whenReady()
-import { initRecorderMain } from 'meetcap-recorder-main'
-import { startDetector } from 'meetcap-detector/main'
+import { initRecorderMain, startDetector } from 'meetcap-main'
 initRecorderMain()                                   // loopback flags + recording IPC
-app.whenReady().then(() => { createWindow(); startDetector({ require: 'window' }) })
+app.whenReady().then(() => { createWindow(); startDetector({ require: 'either' }) })
 
 // preload.ts
 import { contextBridge, ipcRenderer } from 'electron'
@@ -38,8 +37,7 @@ import { exposeMeetcapBridge } from 'meetcap-core/preload'
 exposeMeetcapBridge(contextBridge, ipcRenderer)      // → window.meetcap
 
 // renderer
-import { createDetectorClient } from 'meetcap-detector/renderer'
-import { createRecorder, listInterruptedRecordings } from 'meetcap-recorder-renderer'
+import { createDetectorClient, createRecorder, listInterruptedRecordings } from 'meetcap-renderer'
 
 const detector = createDetectorClient()
 const recorder = createRecorder()
@@ -72,7 +70,20 @@ Three paths:
 
 A normal `stop()`: `MediaRecorder.stop()` → flush the last chunk → drain the write chain → `closeRecording` (marks the segment closed **and the manifest `finalized`**) → fires `complete`. The difference between a clean end and a crash is simply whether the manifest got `finalized`.
 
-## How resume works
+## Pause / resume (within one segment) ≠ segments
+
+Two different mechanisms, easy to conflate:
+
+- **`pause()` / `resume()`** — mid-call hold, **same file, same segment**. Backed by `MediaRecorder.pause()/resume()`: while paused, no `chunk` events fire and nothing is written to disk, so the webm has no gap. State goes `recording → paused → recording`. The reported `durationMs` **excludes** paused time (the recorder subtracts every paused span). Use this for "hold recording" buttons.
+- **Segments** — a *new* `MediaRecorder` stream → a **new file** added to the same logical recording's manifest (see below). Created by `stop()` then `start(meeting, { resumeKey })`, e.g. crash-resume. Use this when the capture genuinely restarts.
+
+```ts
+recorder.pause()    // state → 'paused'; chunks stop; file frozen
+recorder.resume()   // state → 'recording'; same segment continues
+// complete.durationMs is real recorded time, not wall-clock
+```
+
+## How resume works (segments)
 
 meetcap can't append into the *same* webm file after a restart (a new `MediaRecorder` is an independent stream). Instead a **logical recording** spans multiple **segments** (one file per capture run), tied together by a sidecar manifest `<key>.meetcap.json`.
 
@@ -140,7 +151,7 @@ worse: granting it requires an **app restart**, so that recording fails outright
 Request ahead of time (app launch / a settings screen):
 
 ```ts
-import { requestPermissions, openScreenRecordingSettings, getPermissionStatus } from 'meetcap-recorder-renderer'
+import { requestPermissions, openScreenRecordingSettings, getPermissionStatus } from 'meetcap-renderer'
 
 const status = await requestPermissions() // mic = native prompt; screen = registers the app
 if (status.screen !== 'granted') {
@@ -171,15 +182,14 @@ pnpm demo
 
 ### Walkthrough recording
 
-<!-- Replace with the captured asset once recorded:
-![meetcap demo walkthrough](./assets/demo-walkthrough.gif) -->
+![meetcap demo walkthrough](./assets/demo-walkthrough.gif)
 
-📹 **Demo walkthrough** — captured from the running demo via harness-fe session
-replay (the demo is instrumented in solo mode, see [debugging.md](./debugging.md)).
+📹 **Demo walkthrough** — captured from the running demo, driven over MCP via
+harness-fe (the demo is instrumented in solo mode, see [debugging.md](./debugging.md)).
 The asset lives in [`docs/assets/`](./assets/); to (re)capture it:
 
-1. `pnpm demo` (the harness solo gateway auto-spawns on `127.0.0.1:47620`).
-2. Drive the flow — **Record now → speak → Stop**, then a meeting detect/resume pass.
-3. Open the replay at <http://127.0.0.1:47620/console>, play the `meetcap-demo`
-   session, and export / screen-capture it to `docs/assets/demo-walkthrough.gif`.
-4. Swap the comment above for the image embed.
+1. `pnpm demo` (the harness solo gateway auto-spawns on `127.0.0.1:47620`); reload MCP.
+2. Open a real meeting (e.g. start a Zoom meeting) so the detector fires.
+3. Drive the flow over MCP, screenshotting each step — **Zoom detected → Start recording
+   → Pause → Resume → Stop** (or close the meeting to auto-stop) → saved `.webm`.
+4. Stitch the screenshots into `docs/assets/demo-walkthrough.gif` (e.g. ImageMagick).

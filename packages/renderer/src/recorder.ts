@@ -4,7 +4,7 @@
  * to disk chunk-by-chunk via `window.meetcap` — flat memory, crash-safe partial
  * file. Each timeslice is also emitted as a `chunk` event for incremental upload.
  *
- *   import { createRecorder } from 'meetcap-recorder-renderer'
+ *   import { createRecorder } from 'meetcap-renderer'
  *   const rec = createRecorder()
  *   rec.on('chunk', ({ blob }) => uploadPart(blob))      // optional: segmented upload
  *   rec.on('complete', (r) => console.log(r.filePath))   // whole-file on disk
@@ -14,9 +14,9 @@
  * Requires `window.meetcap` (see meetcap-core/preload) and `initRecorderMain()`.
  */
 import type { MeetingInfo, RecordingResult } from 'meetcap-core'
-import { buildFilename, pickMimeType } from './util'
+import { buildFilename, computeDuration, pickMimeType } from './util'
 
-export type RecorderState = 'idle' | 'recording'
+export type RecorderState = 'idle' | 'recording' | 'paused'
 
 export interface RecordingChunk {
   /** 0-based chunk index within this segment. */
@@ -52,6 +52,10 @@ export interface Recorder {
   on(event: 'error', fn: ErrorHandler): Recorder
   /** Start capturing. `meeting` names the file; `opts.resumeKey` continues a recording. */
   start(meeting?: MeetingInfo | null, opts?: StartOptions): Promise<void>
+  /** Pause capturing within the same segment/file. No-op unless `recording`. */
+  pause(): void
+  /** Resume a paused capture (same segment/file). No-op unless `paused`. */
+  resume(): void
   /** Stop capturing; fires `complete` once the segment is finalized. */
   stop(): void
   readonly state: RecorderState
@@ -111,6 +115,8 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
   let recordingKey: string | null = null
   let chunkIndex = 0
   let startedAt = 0
+  let pausedAccumMs = 0 // total of finished pauses
+  let pausedAt: number | null = null // start of an in-progress pause (null = recording)
   let meeting: MeetingInfo | null = null
   let hasSystemAudio = false
   // Serializes disk writes so chunks land in capture order (webm header first).
@@ -132,13 +138,15 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
     },
 
     async start(m = null, opts = {}) {
-      if (mediaRecorder?.state === 'recording') return
+      if (state !== 'idle') return
       meeting = m
       try {
         const built = await buildMixedStream()
         cleanup = built.cleanup
         hasSystemAudio = built.hasSystemAudio
         startedAt = Date.now()
+        pausedAccumMs = 0
+        pausedAt = null
         chunkIndex = 0
         writeChain = Promise.resolve()
         const mimeType = pickMimeType()
@@ -181,10 +189,25 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
       }
     },
 
+    pause() {
+      if (state !== 'recording' || mediaRecorder?.state !== 'recording') return
+      mediaRecorder.pause()
+      pausedAt = Date.now()
+      setState('paused')
+    },
+
+    resume() {
+      if (state !== 'paused' || mediaRecorder?.state !== 'paused') return
+      if (pausedAt !== null) pausedAccumMs += Date.now() - pausedAt
+      pausedAt = null
+      mediaRecorder.resume()
+      setState('recording')
+    },
+
     stop() {
       if (!mediaRecorder || mediaRecorder.state === 'inactive') return
       const mr = mediaRecorder
-      const durationMs = Date.now() - startedAt
+      const durationMs = computeDuration(startedAt, Date.now(), pausedAccumMs, pausedAt)
       mr.onstop = () => {
         const id = openId
         void writeChain

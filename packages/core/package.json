@@ -1,6 +1,6 @@
 {
   "name": "meetcap-core",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Shared types and IPC contract for meetcap (meeting detection + recording in Electron)",
   "license": "MIT",
   "type": "commonjs",
@@ -28,7 +28,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paul-leo/zoom-record-demo.git",
+    "url": "git+https://github.com/paul-leo/meetcap.git",
     "directory": "packages/core"
   },
   "keywords": ["electron", "meeting", "recorder", "ipc", "meetcap"],

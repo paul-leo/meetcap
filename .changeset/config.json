@@ -3,7 +3,7 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
-  "linked": [["meetcap-core", "meetcap-detector", "meetcap-recorder-main", "meetcap-recorder-renderer"]],
+  "linked": [["meetcap-core", "meetcap-main", "meetcap-renderer"]],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",

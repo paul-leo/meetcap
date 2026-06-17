@@ -10,6 +10,7 @@
     "typecheck": "turbo typecheck",
     "test": "vitest run",
     "demo": "pnpm --filter electron-demo start",
+    "dist:app": "turbo build && pnpm --filter electron-demo dist",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "turbo build && bash scripts/release-publish.sh"

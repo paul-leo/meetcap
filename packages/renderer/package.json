@@ -1,7 +1,7 @@
 {
-  "name": "meetcap-recorder-renderer",
-  "version": "0.1.0",
-  "description": "Renderer-process capture for meetcap: mic + system (loopback) audio, mix, record to webm, save. Framework-agnostic + React/Vue hooks.",
+  "name": "meetcap-renderer",
+  "version": "0.0.0",
+  "description": "Renderer-process half of meetcap: detector client + mic & system (loopback) audio capture, mix, record to webm, save. Framework-agnostic + React/Vue hooks. Electron.",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/index.js",
@@ -21,10 +21,10 @@
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paul-leo/zoom-record-demo.git",
-    "directory": "packages/recorder-renderer"
+    "url": "git+https://github.com/paul-leo/meetcap.git",
+    "directory": "packages/renderer"
   },
-  "keywords": ["electron", "audio", "recorder", "loopback", "mediarecorder", "react", "vue", "meetcap"],
+  "keywords": ["electron", "zoom", "meeting", "detection", "audio", "recorder", "loopback", "mediarecorder", "react", "vue", "meetcap"],
   "dependencies": {
     "meetcap-core": "workspace:*"
   },

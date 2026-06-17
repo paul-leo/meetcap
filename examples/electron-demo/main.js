@@ -5,8 +5,7 @@
 // meetcap-* packages; everything process-specific lives inside them.
 const { app, BrowserWindow } = require('electron')
 const path = require('path')
-const { initRecorderMain } = require('meetcap-recorder-main')
-const { startDetector } = require('meetcap-detector/main')
+const { initRecorderMain, startDetector } = require('meetcap-main')
 
 // MUST run before app is ready — initRecorderMain injects the macOS loopback
 // Chromium feature flags via electron-audio-loopback.
@@ -29,7 +28,9 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow()
   // Main-process poller; broadcasts meeting-detected / meeting-ended to renderers.
-  startDetector({ intervalMs: 3000, require: 'window' })
+  // 'either' = window OR meeting-only process (Zoom's CptHost/aomhost), so a
+  // minimized/hidden meeting window doesn't read as "meeting ended".
+  startDetector({ intervalMs: 3000, require: 'either' })
 })
 
 app.on('window-all-closed', () => app.quit())
