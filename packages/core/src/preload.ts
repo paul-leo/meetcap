@@ -35,8 +35,11 @@ export function exposeMeetcapBridge(
     },
     listWindows: () => ipcRenderer.invoke(IPC.listWindows) as ReturnType<MeetcapBridge['listWindows']>,
     mediaAccess: () => ipcRenderer.invoke(IPC.mediaAccess) as ReturnType<MeetcapBridge['mediaAccess']>,
-    saveRecording: (buffer: ArrayBuffer, filename: string) =>
-      ipcRenderer.invoke(IPC.saveRecording, { buffer, filename }) as Promise<string>,
+    openRecording: (filename: string) =>
+      ipcRenderer.invoke(IPC.recordingOpen, { filename }) as ReturnType<MeetcapBridge['openRecording']>,
+    writeRecordingChunk: (id: string, chunk: ArrayBuffer) =>
+      ipcRenderer.invoke(IPC.recordingWrite, { id, chunk }) as Promise<void>,
+    closeRecording: (id: string) => ipcRenderer.invoke(IPC.recordingClose, { id }) as Promise<string>,
     enableLoopbackAudio: () => ipcRenderer.invoke(IPC.enableLoopback) as Promise<void>,
     disableLoopbackAudio: () => ipcRenderer.invoke(IPC.disableLoopback) as Promise<void>,
   }

@@ -1,11 +1,12 @@
 /**
  * Renderer-side recorder. Captures microphone + system (loopback) audio, mixes
- * them with the Web Audio API, records to a webm/opus Blob, and saves to disk
- * via `window.meetcap`.
+ * them with the Web Audio API, and **streams** the webm/opus output to disk
+ * chunk-by-chunk via `window.meetcap` — so memory stays flat regardless of
+ * recording length, and a mid-session crash leaves a partial-but-playable file.
  *
- *   import { createRecorder } from 'meetcap-recorder/renderer'
+ *   import { createRecorder } from 'meetcap-recorder-renderer'
  *   const rec = createRecorder()
- *   rec.on('complete', async (r) => { await rec.save(r) })
+ *   rec.on('complete', (r) => console.log('saved to', r.filePath))
  *   await rec.start(meeting)
  *   // …later: rec.stop()
  *
@@ -20,6 +21,8 @@ export type RecorderState = 'idle' | 'recording'
 export interface CreateRecorderOptions {
   /** Filename prefix for saved recordings. Default `meetcap`. */
   filenamePrefix?: string
+  /** MediaRecorder timeslice in ms (how often a chunk is flushed to disk). Default 1000. */
+  timesliceMs?: number
 }
 
 type StateHandler = (state: RecorderState) => void
@@ -30,12 +33,10 @@ export interface Recorder {
   on(event: 'statechange', fn: StateHandler): Recorder
   on(event: 'complete', fn: CompleteHandler): Recorder
   on(event: 'error', fn: ErrorHandler): Recorder
-  /** Start capturing. `meeting` is attached to the result for naming/metadata. */
+  /** Start capturing. `meeting` is attached to the result and names the file. */
   start(meeting?: MeetingInfo | null): Promise<void>
-  /** Stop capturing; fires `complete` with the recorded blob. */
+  /** Stop capturing; fires `complete` once the file is finalized on disk. */
   stop(): void
-  /** Persist a finished recording to disk; returns the absolute path. */
-  save(result: RecordingResult): Promise<string>
   readonly state: RecorderState
   destroy(): void
 }
@@ -79,6 +80,7 @@ async function buildMixedStream(): Promise<MixedStream> {
 
 export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
   const prefix = options.filenamePrefix ?? 'meetcap'
+  const timesliceMs = options.timesliceMs ?? 1000
   const stateHandlers = new Set<StateHandler>()
   const completeHandlers = new Set<CompleteHandler>()
   const errorHandlers = new Set<ErrorHandler>()
@@ -86,10 +88,14 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
   let state: RecorderState = 'idle'
   let mediaRecorder: MediaRecorder | null = null
   let cleanup: (() => void) | null = null
-  let chunks: Blob[] = []
+  let recordingId: string | null = null
+  let filePath = ''
   let startedAt = 0
   let meeting: MeetingInfo | null = null
   let hasSystemAudio = false
+  // Serializes chunk writes so they reach disk in capture order (webm requires
+  // the header chunk first). Each ondataavailable links onto this chain.
+  let writeChain: Promise<void> = Promise.resolve()
 
   const setState = (s: RecorderState) => {
     state = s
@@ -112,20 +118,32 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
         const built = await buildMixedStream()
         cleanup = built.cleanup
         hasSystemAudio = built.hasSystemAudio
-        chunks = []
         startedAt = Date.now()
+        writeChain = Promise.resolve()
+
+        const filename = buildFilename(meeting, new Date(), prefix)
+        const handle = await window.meetcap.openRecording(filename)
+        recordingId = handle.id
+        filePath = handle.path
 
         const mimeType = pickMimeType()
         mediaRecorder = new MediaRecorder(built.mixed, { mimeType })
         mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data)
+          if (e.data.size === 0 || !recordingId) return
+          const id = recordingId
+          // Append to the write chain → ordered, one chunk in flight at a time.
+          writeChain = writeChain.then(async () => {
+            const buf = await e.data.arrayBuffer()
+            await window.meetcap.writeRecordingChunk(id, buf)
+          })
         }
-        mediaRecorder.start(1000)
+        mediaRecorder.start(timesliceMs)
         setState('recording')
       } catch (err) {
         emitError(err)
         cleanup?.()
         cleanup = null
+        recordingId = null
       }
     },
 
@@ -133,27 +151,34 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
       if (!mediaRecorder || mediaRecorder.state === 'inactive') return
       const mr = mediaRecorder
       mr.onstop = () => {
-        const result: RecordingResult = {
-          blob: new Blob(chunks, { type: mr.mimeType }),
-          durationMs: Date.now() - startedAt,
-          mimeType: mr.mimeType,
-          hasSystemAudio,
-          meeting,
-        }
-        chunks = []
-        cleanup?.()
-        cleanup = null
-        mediaRecorder = null
-        setState('idle')
-        completeHandlers.forEach((fn) => fn(result))
+        const id = recordingId
+        void writeChain
+          .then(() => (id ? window.meetcap.closeRecording(id) : filePath))
+          .then((savedPath) => {
+            const result: RecordingResult = {
+              filePath: savedPath || filePath,
+              durationMs: Date.now() - startedAt,
+              mimeType: mr.mimeType,
+              hasSystemAudio,
+              meeting,
+            }
+            cleanup?.()
+            cleanup = null
+            mediaRecorder = null
+            recordingId = null
+            setState('idle')
+            completeHandlers.forEach((fn) => fn(result))
+          })
+          .catch((err) => {
+            cleanup?.()
+            cleanup = null
+            mediaRecorder = null
+            recordingId = null
+            setState('idle')
+            emitError(err)
+          })
       }
       mr.stop()
-    },
-
-    async save(result) {
-      const buffer = await result.blob.arrayBuffer()
-      const filename = buildFilename(result.meeting, new Date(), prefix)
-      return window.meetcap.saveRecording(buffer, filename)
     },
 
     get state() {

@@ -55,13 +55,22 @@ export interface DetectorEvent {
   meeting: MeetingInfo | null
 }
 
-/** A finished recording. */
+/** A finished recording. The audio is already on disk (streamed during capture). */
 export interface RecordingResult {
-  blob: Blob
+  /** Absolute path of the written file. */
+  filePath: string
   durationMs: number
   mimeType: string
   hasSystemAudio: boolean
   meeting: MeetingInfo | null
+}
+
+/** A recording handle returned when capture starts (streaming to disk). */
+export interface RecordingHandle {
+  /** Opaque id used to write chunks and close the recording. */
+  id: string
+  /** Absolute path the chunks are being appended to. */
+  path: string
 }
 
 /** macOS media-permission snapshot (other platforms report "n/a"). */
@@ -84,8 +93,12 @@ export interface MeetcapBridge {
   listWindows(): Promise<WindowSource[]>
   /** macOS permission status. */
   mediaAccess(): Promise<PermissionStatus>
-  /** Persist recorded bytes to disk; returns the absolute path. */
-  saveRecording(buffer: ArrayBuffer, filename: string): Promise<string>
+  /** Open a recording file and start streaming. Returns an id + the path. */
+  openRecording(filename: string): Promise<RecordingHandle>
+  /** Append one chunk of bytes to an open recording (called per timeslice). */
+  writeRecordingChunk(id: string, chunk: ArrayBuffer): Promise<void>
+  /** Finalize an open recording; returns the absolute path. */
+  closeRecording(id: string): Promise<string>
   /** Enable the loopback display-media handler (electron-audio-loopback). */
   enableLoopbackAudio(): Promise<void>
   /** Disable the loopback display-media handler. */
@@ -108,7 +121,9 @@ export const IPC = {
   detectorEvent: 'meetcap:detector-event',
   listWindows: 'meetcap:list-windows',
   mediaAccess: 'meetcap:media-access',
-  saveRecording: 'meetcap:save-recording',
+  recordingOpen: 'meetcap:recording-open',
+  recordingWrite: 'meetcap:recording-write',
+  recordingClose: 'meetcap:recording-close',
   enableLoopback: 'enable-loopback-audio',
   disableLoopback: 'disable-loopback-audio',
 } as const

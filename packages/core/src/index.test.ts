@@ -9,7 +9,9 @@ describe('IPC channel contract', () => {
       detectorEvent: 'meetcap:detector-event',
       listWindows: 'meetcap:list-windows',
       mediaAccess: 'meetcap:media-access',
-      saveRecording: 'meetcap:save-recording',
+      recordingOpen: 'meetcap:recording-open',
+      recordingWrite: 'meetcap:recording-write',
+      recordingClose: 'meetcap:recording-close',
       enableLoopback: 'enable-loopback-audio',
       disableLoopback: 'disable-loopback-audio',
     })

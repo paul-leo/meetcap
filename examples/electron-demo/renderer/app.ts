@@ -85,26 +85,20 @@ recorder.on('statechange', (s) => {
   else exitRecordingUI()
 })
 recorder.on('error', (e) => log('ERROR: ' + ((e as Error)?.message || String(e))))
-recorder.on('complete', async (result) => {
-  log(
-    `complete: ${(result.blob.size / 1024).toFixed(1)} KB · ${(result.durationMs / 1000).toFixed(1)}s · systemAudio=${result.hasSystemAudio}`,
-  )
+recorder.on('complete', (result) => {
+  // Streamed straight to disk — the file is already complete on stop.
+  log(`complete: ${(result.durationMs / 1000).toFixed(1)}s · systemAudio=${result.hasSystemAudio}`)
+  log(`saved → ${result.filePath}`)
   const audio = document.createElement('audio')
   audio.controls = true
-  audio.src = URL.createObjectURL(result.blob)
+  audio.src = `file://${result.filePath}` // preview from disk (no in-memory blob)
   $('result').innerHTML = ''
   $('result').appendChild(audio)
-  try {
-    const path = await recorder.save(result)
-    log(`saved → ${path}`)
-    const note = document.createElement('div')
-    note.className = 'k'
-    note.style.marginTop = '6px'
-    note.textContent = `saved → ${path}`
-    $('result').appendChild(note)
-  } catch (err) {
-    log('ERROR saving: ' + ((err as Error)?.message || String(err)))
-  }
+  const note = document.createElement('div')
+  note.className = 'k'
+  note.style.marginTop = '6px'
+  note.textContent = `saved → ${result.filePath}`
+  $('result').appendChild(note)
 })
 
 // ── detector events ───────────────────────────────────────────────────────────

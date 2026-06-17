@@ -1,7 +1,7 @@
 /**
  * Vue composable over the recorder.
  *
- *   import { useRecorder } from 'meetcap-recorder/vue'
+ *   import { useRecorder } from 'meetcap-recorder-renderer/vue'
  *   const { start, stop, state, lastResult } = useRecorder()
  *
  * `vue` is an optional peer dependency.
@@ -15,7 +15,6 @@ export function useRecorder(options?: CreateRecorderOptions): {
   lastResult: Ref<RecordingResult | null>
   start: (meeting?: MeetingInfo | null) => Promise<void>
   stop: () => void
-  save: (result: RecordingResult) => Promise<string>
 } {
   const state = ref<RecorderState>('idle')
   const lastResult = ref<RecordingResult | null>(null)
@@ -29,6 +28,5 @@ export function useRecorder(options?: CreateRecorderOptions): {
     lastResult,
     start: (meeting) => recorder.start(meeting),
     stop: () => recorder.stop(),
-    save: (result) => recorder.save(result),
   }
 }

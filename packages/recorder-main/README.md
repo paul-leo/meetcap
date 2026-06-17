@@ -12,7 +12,9 @@ import { initRecorderMain } from 'meetcap-recorder-main'
 initRecorderMain() // or { saveDir, revealInFolder }
 ```
 
-It (1) injects the macOS loopback Chromium feature flags + registers the enable/disable-loopback-audio handlers (via [`electron-audio-loopback`](https://github.com/alectrocute/electron-audio-loopback)), and (2) registers the `save-recording` and `media-access` IPC handlers.
+It (1) injects the macOS loopback Chromium feature flags + registers the enable/disable-loopback-audio handlers (via [`electron-audio-loopback`](https://github.com/alectrocute/electron-audio-loopback)), and (2) registers the streaming recording IPC (`open` / `write` / `close`) and `media-access`.
+
+Recordings are **streamed to disk** as they're captured (one timeslice appended per chunk), so memory stays flat regardless of length and a mid-session crash leaves a partial-but-playable file.
 
 The renderer half — capture, mix, record — is [`meetcap-recorder-renderer`](../recorder-renderer).
 

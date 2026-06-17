@@ -1,7 +1,7 @@
 /**
  * React hook over the recorder.
  *
- *   import { useRecorder } from 'meetcap-recorder/react'
+ *   import { useRecorder } from 'meetcap-recorder-renderer/react'
  *   const { start, stop, state, lastResult } = useRecorder()
  *
  * `react` is an optional peer dependency.
@@ -12,10 +12,10 @@ import { createRecorder, type CreateRecorderOptions, type Recorder, type Recorde
 
 export interface UseRecorder {
   state: RecorderState
+  /** The last finished recording (already written to disk). */
   lastResult: RecordingResult | null
   start: (meeting?: MeetingInfo | null) => Promise<void>
   stop: () => void
-  save: (result: RecordingResult) => Promise<string>
 }
 
 export function useRecorder(options?: CreateRecorderOptions): UseRecorder {
@@ -37,6 +37,5 @@ export function useRecorder(options?: CreateRecorderOptions): UseRecorder {
     lastResult,
     start: (meeting) => ref.current?.start(meeting) ?? Promise.resolve(),
     stop: () => ref.current?.stop(),
-    save: (result) => ref.current!.save(result),
   }
 }

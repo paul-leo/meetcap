@@ -1,6 +1,6 @@
 # meetcap-recorder-renderer
 
-Renderer-process half of [meetcap recording](https://github.com/paul-leo/zoom-record-demo). Records **both sides** of a call — your microphone *and* the other party's voice (system / loopback audio) — mixes them, and saves to disk.
+Renderer-process half of [meetcap recording](https://github.com/paul-leo/zoom-record-demo). Records **both sides** of a call — your microphone *and* the other party's voice (system / loopback audio) — mixes them, and **streams the result straight to disk** (flat memory; crash-safe partial file).
 
 ```bash
 npm install meetcap-recorder-renderer meetcap-core
@@ -14,9 +14,9 @@ Pair it with [`meetcap-recorder-main`](../recorder-main) (which injects the macO
 import { createRecorder } from 'meetcap-recorder-renderer'
 
 const rec = createRecorder()
-rec.on('complete', async (result) => {
-  console.log(result.durationMs, 'ms · systemAudio:', result.hasSystemAudio)
-  await rec.save(result) // → <downloads>/meetcap/meetcap-Zoom-….webm
+rec.on('complete', (result) => {
+  // Already on disk — no save step. result.filePath → <downloads>/meetcap/meetcap-Zoom-….webm
+  console.log(result.filePath, result.durationMs, 'ms · systemAudio:', result.hasSystemAudio)
 })
 await rec.start(meeting) // meeting is optional metadata for the filename
 // …later: rec.stop()
