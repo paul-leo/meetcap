@@ -19,7 +19,7 @@
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paul-leo/zoom-record-demo.git",
+    "url": "git+https://github.com/paul-leo/meetcap.git",
     "directory": "packages/main"
   },
   "keywords": ["electron", "zoom", "meeting", "detection", "audio", "recorder", "loopback", "system-audio", "ps-list", "meetcap"],

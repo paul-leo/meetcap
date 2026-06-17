@@ -28,7 +28,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paul-leo/zoom-record-demo.git",
+    "url": "git+https://github.com/paul-leo/meetcap.git",
     "directory": "packages/core"
   },
   "keywords": ["electron", "meeting", "recorder", "ipc", "meetcap"],

@@ -1,6 +1,6 @@
 # meetcap-renderer
 
-The **renderer-process** half of [meetcap](https://github.com/paul-leo/zoom-record-demo): subscribe to meeting detection **and** capture mic + system (loopback) audio, mix, record to webm, and save — in any Electron app. Pair it with [`meetcap-main`](../main) and [`meetcap-core`](../core).
+The **renderer-process** half of [meetcap](https://github.com/paul-leo/meetcap): subscribe to meeting detection **and** capture mic + system (loopback) audio, mix, record to webm, and save — in any Electron app. Pair it with [`meetcap-main`](../main) and [`meetcap-core`](../core).
 
 Import this in the **renderer** only. Requires `window.meetcap` (wired by `meetcap-core/preload`) and `initRecorderMain()` running in the main process.
 

@@ -1,6 +1,6 @@
 # meetcap-main
 
-The **main-process** half of [meetcap](https://github.com/paul-leo/zoom-record-demo): detect native meeting clients (Zoom / Teams / Tencent / Lark) **and** set up loopback recording — in any Electron app. Pair it with [`meetcap-renderer`](../renderer) and [`meetcap-core`](../core).
+The **main-process** half of [meetcap](https://github.com/paul-leo/meetcap): detect native meeting clients (Zoom / Teams / Tencent / Lark) **and** set up loopback recording — in any Electron app. Pair it with [`meetcap-renderer`](../renderer) and [`meetcap-core`](../core).
 
 Import this in the Electron **main process only** — it reaches for `desktopCapturer`, `ps-list`, and the macOS loopback flags.
 
