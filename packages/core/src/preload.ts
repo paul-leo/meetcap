@@ -35,11 +35,14 @@ export function exposeMeetcapBridge(
     },
     listWindows: () => ipcRenderer.invoke(IPC.listWindows) as ReturnType<MeetcapBridge['listWindows']>,
     mediaAccess: () => ipcRenderer.invoke(IPC.mediaAccess) as ReturnType<MeetcapBridge['mediaAccess']>,
-    openRecording: (filename: string) =>
-      ipcRenderer.invoke(IPC.recordingOpen, { filename }) as ReturnType<MeetcapBridge['openRecording']>,
+    openRecording: (args: Parameters<MeetcapBridge['openRecording']>[0]) =>
+      ipcRenderer.invoke(IPC.recordingOpen, args) as ReturnType<MeetcapBridge['openRecording']>,
     writeRecordingChunk: (id: string, chunk: ArrayBuffer) =>
       ipcRenderer.invoke(IPC.recordingWrite, { id, chunk }) as Promise<void>,
-    closeRecording: (id: string) => ipcRenderer.invoke(IPC.recordingClose, { id }) as Promise<string>,
+    closeRecording: (id: string, durationMs?: number) =>
+      ipcRenderer.invoke(IPC.recordingClose, { id, durationMs }) as ReturnType<MeetcapBridge['closeRecording']>,
+    listInterruptedRecordings: () =>
+      ipcRenderer.invoke(IPC.recordingList) as ReturnType<MeetcapBridge['listInterruptedRecordings']>,
     enableLoopbackAudio: () => ipcRenderer.invoke(IPC.enableLoopback) as Promise<void>,
     disableLoopbackAudio: () => ipcRenderer.invoke(IPC.disableLoopback) as Promise<void>,
   }

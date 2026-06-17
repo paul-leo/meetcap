@@ -14,7 +14,7 @@
 void import('@harness-fe/runtime')
 
 import { createDetectorClient } from 'meetcap-detector/renderer'
-import { createRecorder } from 'meetcap-recorder-renderer'
+import { createRecorder, listInterruptedRecordings } from 'meetcap-recorder-renderer'
 import type { MeetingInfo } from 'meetcap-core'
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement
@@ -45,6 +45,7 @@ const detector = createDetectorClient()
 const recorder = createRecorder()
 let currentMeeting: MeetingInfo | null = null
 let recTimer: ReturnType<typeof setInterval> | null = null
+let resumeKey: string | null = null // set when resuming an interrupted recording
 
 // ── banner / recording UI ─────────────────────────────────────────────────────
 function showBanner(m: MeetingInfo) {
@@ -83,21 +84,40 @@ recorder.on('statechange', (s) => {
   log(`recorder: ${s}`)
   if (s === 'recording') enterRecordingUI()
   else exitRecordingUI()
+  // Reflect state on the standalone record button too.
+  ;($('btn-record') as HTMLButtonElement).textContent =
+    s === 'recording' ? '■ Stop recording' : '● Record now'
 })
 recorder.on('error', (e) => log('ERROR: ' + ((e as Error)?.message || String(e))))
+
+// Per-timeslice chunks — this is the segmented-upload firehose. Here we just
+// tally them to show the streaming is live; a real app would upload each blob.
+let chunkBytes = 0
+recorder.on('chunk', ({ index, blob }) => {
+  chunkBytes += blob.size
+  if (index % 5 === 0) log(`chunk #${index} · ${(chunkBytes / 1024).toFixed(0)} KB streamed so far`)
+})
+
 recorder.on('complete', (result) => {
-  // Streamed straight to disk — the file is already complete on stop.
-  log(`complete: ${(result.durationMs / 1000).toFixed(1)}s · systemAudio=${result.hasSystemAudio}`)
+  chunkBytes = 0
+  log(
+    `complete: ${(result.durationMs / 1000).toFixed(1)}s · systemAudio=${result.hasSystemAudio} · ${result.segments.length} segment(s)`,
+  )
   log(`saved → ${result.filePath}`)
-  const audio = document.createElement('audio')
-  audio.controls = true
-  audio.src = `file://${result.filePath}` // preview from disk (no in-memory blob)
   $('result').innerHTML = ''
-  $('result').appendChild(audio)
+  if (result.filePath) {
+    const audio = document.createElement('audio')
+    audio.controls = true
+    audio.src = `file://${result.filePath}` // preview from disk (no in-memory blob)
+    $('result').appendChild(audio)
+  }
   const note = document.createElement('div')
   note.className = 'k'
   note.style.marginTop = '6px'
-  note.textContent = `saved → ${result.filePath}`
+  note.textContent = result.segments.length
+    ? `recording ${result.recordingKey?.slice(0, 8)} · segments:\n${result.segments.join('\n')}`
+    : 'no file (persistToDisk off)'
+  note.style.whiteSpace = 'pre-wrap'
   $('result').appendChild(note)
 })
 
@@ -114,9 +134,18 @@ detector.on('meeting-ended', () => {
 })
 
 // ── buttons ───────────────────────────────────────────────────────────────────
-$('btn-start').onclick = () => recorder.start(currentMeeting)
+// Start a recording, consuming a pending resumeKey (set by the Resume banner).
+function startRecording() {
+  const opts = resumeKey ? { resumeKey } : undefined
+  if (resumeKey) log(`resuming recording ${resumeKey.slice(0, 8)} (new segment)`)
+  void recorder.start(currentMeeting, opts)
+  resumeKey = null
+}
+$('btn-start').onclick = () => startRecording()
 $('btn-stop-banner').onclick = () => recorder.stop()
 $('btn-dismiss').onclick = () => hideBanner()
+$('btn-record').onclick = () =>
+  recorder.state === 'recording' ? recorder.stop() : startRecording()
 $('btn-list').onclick = async () => {
   const wins = await window.meetcap.listWindows()
   log(`--- ${wins.length} sources ---`)
@@ -129,4 +158,25 @@ void refreshPerms()
 window.meetcap.detectOnce().then((m) => {
   if (m) showBanner(m)
   else setPill($('det-state'), 'scanning', 'warn')
+})
+
+// Crash recovery: surface recordings that never finalized (process died mid-capture).
+void listInterruptedRecordings().then((list) => {
+  if (list.length === 0) return
+  log(`found ${list.length} interrupted recording(s) from a previous run`)
+  const rec = list[0]
+  const bar = document.createElement('div')
+  bar.className = 'card'
+  bar.style.borderColor = '#4a3410'
+  bar.innerHTML =
+    `<div class="row" style="justify-content:space-between">` +
+    `<div>Interrupted recording <strong>${rec.key.slice(0, 8)}</strong> — ${rec.segmentFiles.length} segment(s). Resume?</div>` +
+    `<button id="btn-resume">Resume</button></div>`
+  document.querySelector('main')!.prepend(bar)
+  ;($('btn-resume') as HTMLButtonElement).onclick = () => {
+    resumeKey = rec.key
+    currentMeeting = rec.meeting
+    bar.remove()
+    startRecording()
+  }
 })

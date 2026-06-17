@@ -55,22 +55,77 @@ export interface DetectorEvent {
   meeting: MeetingInfo | null
 }
 
-/** A finished recording. The audio is already on disk (streamed during capture). */
+/** A finished recording (one stop() call = one segment of a logical recording). */
 export interface RecordingResult {
-  /** Absolute path of the written file. */
-  filePath: string
+  /** Absolute path of this segment's file, or null when disk persistence is off. */
+  filePath: string | null
+  /** Logical-recording id this segment belongs to (null when not persisting). */
+  recordingKey: string | null
+  /** All segment file paths of the logical recording (for whole/segmented upload). */
+  segments: string[]
   durationMs: number
   mimeType: string
   hasSystemAudio: boolean
   meeting: MeetingInfo | null
 }
 
-/** A recording handle returned when capture starts (streaming to disk). */
+/** Handle returned when a segment starts streaming to disk. */
 export interface RecordingHandle {
-  /** Opaque id used to write chunks and close the recording. */
+  /** Opaque id used to write chunks and close this segment. */
   id: string
-  /** Absolute path the chunks are being appended to. */
+  /** Absolute path this segment's chunks are appended to. */
   path: string
+  /** Logical-recording id (new or resumed). */
+  recordingKey: string
+  /** 0-based index of this segment within the logical recording. */
+  segmentIndex: number
+}
+
+/** Arguments to open a recording segment. */
+export interface OpenRecordingArgs {
+  /** Filename for this segment (e.g. from buildFilename). */
+  filename: string
+  /** Resume an existing logical recording by key; omit to start a new one. */
+  recordingKey?: string
+  meeting?: MeetingInfo | null
+  mimeType?: string
+}
+
+/** Result of closing a segment. */
+export interface CloseRecordingResult {
+  filePath: string
+  recordingKey: string
+  /** All segment file paths of the (now finalized) logical recording. */
+  segments: string[]
+}
+
+/** One segment within a logical recording's manifest. */
+export interface RecordingSegment {
+  file: string
+  startedAt: number
+  durationMs?: number
+  status: 'active' | 'closed'
+}
+
+/** Sidecar manifest tracking a logical recording across segments/restarts. */
+export interface RecordingManifest {
+  key: string
+  meeting: MeetingInfo | null
+  mimeType: string
+  createdAt: number
+  status: 'active' | 'finalized'
+  segments: RecordingSegment[]
+}
+
+/** A recording that never finalized (process died mid-capture) — resumable. */
+export interface InterruptedRecording {
+  key: string
+  meeting: MeetingInfo | null
+  mimeType: string
+  /** Absolute paths of all segment files written so far. */
+  segmentFiles: string[]
+  /** The last (partial-but-playable) segment file. */
+  lastSegmentPath: string
 }
 
 /** macOS media-permission snapshot (other platforms report "n/a"). */
@@ -93,12 +148,14 @@ export interface MeetcapBridge {
   listWindows(): Promise<WindowSource[]>
   /** macOS permission status. */
   mediaAccess(): Promise<PermissionStatus>
-  /** Open a recording file and start streaming. Returns an id + the path. */
-  openRecording(filename: string): Promise<RecordingHandle>
-  /** Append one chunk of bytes to an open recording (called per timeslice). */
+  /** Open a recording segment and start streaming (new or resumed). */
+  openRecording(args: OpenRecordingArgs): Promise<RecordingHandle>
+  /** Append one chunk of bytes to an open segment (called per timeslice). */
   writeRecordingChunk(id: string, chunk: ArrayBuffer): Promise<void>
-  /** Finalize an open recording; returns the absolute path. */
-  closeRecording(id: string): Promise<string>
+  /** Finalize a segment + its logical recording; returns paths. */
+  closeRecording(id: string, durationMs?: number): Promise<CloseRecordingResult>
+  /** List recordings that never finalized (resumable after a crash/exit). */
+  listInterruptedRecordings(): Promise<InterruptedRecording[]>
   /** Enable the loopback display-media handler (electron-audio-loopback). */
   enableLoopbackAudio(): Promise<void>
   /** Disable the loopback display-media handler. */
@@ -124,6 +181,7 @@ export const IPC = {
   recordingOpen: 'meetcap:recording-open',
   recordingWrite: 'meetcap:recording-write',
   recordingClose: 'meetcap:recording-close',
+  recordingList: 'meetcap:recording-list',
   enableLoopback: 'enable-loopback-audio',
   disableLoopback: 'disable-loopback-audio',
 } as const

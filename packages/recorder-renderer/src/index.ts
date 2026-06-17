@@ -9,9 +9,12 @@
  */
 export {
   createRecorder,
+  listInterruptedRecordings,
   type Recorder,
   type RecorderState,
   type CreateRecorderOptions,
+  type StartOptions,
+  type RecordingChunk,
 } from './renderer'
 export { pickMimeType, buildFilename } from './util'
-export type { RecordingResult } from 'meetcap-core'
+export type { RecordingResult, InterruptedRecording } from 'meetcap-core'
