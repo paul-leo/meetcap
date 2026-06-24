@@ -31,9 +31,12 @@ export const presets: MeetingRule[] = [
     app: 'Zoom',
     window: [/zoom\s*meeting/i, /zoom\s*会议/i],
     process: [/zoom\.us/i, /\bzoom\b/i, /CptHost/i],
-    // Meeting-only helpers: spawned for a call, gone when it ends (not when the
+    // Meeting-only helper: spawned for a call, gone when it ends (not when the
     // app is merely open — that's `zoom.us`). Robust to a minimized window.
-    meetingProcess: [/CptHost/i, /aomhost/i, /caphost/i],
+    // NOTE: `caphost` is Zoom Workplace's capture/screenshot helper — it runs
+    // while the app is merely open (e.g. the login screen), so it is NOT a
+    // meeting signal and must stay out of this list (false-positive otherwise).
+    meetingProcess: [/CptHost/i, /aomhost/i],
   },
   {
     id: 'teams',
