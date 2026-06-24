@@ -1,5 +1,11 @@
 # meetcap-main
 
+## 0.1.1
+
+### Patch Changes
+
+- 3fb51b6: Fix Zoom false positive: `caphost` is Zoom Workplace's capture/screenshot helper that runs while the app is merely open (e.g. the login screen), not a meeting. Removed it from the Zoom rule's `meetingProcess` so being signed in no longer reads as "in a meeting". The genuine meeting-only helpers `CptHost` and `aomhost` (spawned on join, gone on leave) remain.
+
 ## 0.1.0
 
 ### Minor Changes

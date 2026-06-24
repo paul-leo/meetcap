@@ -1,6 +1,6 @@
 {
   "name": "meetcap-main",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Main-process half of meetcap: detect native meeting clients (Zoom / Teams / Tencent / Lark) + set up loopback recording, save & media-access IPC. Electron.",
   "license": "MIT",
   "type": "commonjs",
