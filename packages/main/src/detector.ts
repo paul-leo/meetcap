@@ -45,13 +45,13 @@ export function startDetector(opts: StartDetectorOptions = {}): Detector {
   const rules = opts.rules ?? presets
   const state = createDetectionState()
 
-  const policy = opts.require ?? 'either'
+  const policy = opts.require ?? 'process'
 
   async function detectOnce(): Promise<MeetingInfo | null> {
-    const sources = await listWindowSources()
-    // 'window' can early-out cheaply (skip ps-list while idle). Process-aware
-    // policies must enumerate processes so a minimized/hidden meeting still
-    // registers via its meeting-only process.
+    // Skip desktopCapturer entirely when the policy doesn't need window titles.
+    // On macOS 15 Sequoia, getSources can trigger the SCContentSharingPicker
+    // permission dialog even for types:['window'], so we only call it when needed.
+    const sources = policy === 'process' ? [] : await listWindowSources()
     if (policy === 'window' && !matchWindow(sources, rules)) return null
     const procs = await listProcesses()
     return resolveMeeting(sources, procs, opts)

@@ -9,10 +9,11 @@ export interface DetectorConfig {
    * (a minimized/hidden window vanishes from `desktopCapturer`); a meeting-only
    * process (`rule.meetingProcess`, e.g. Zoom's `CptHost`) is robust to that.
    *
-   * - `'either'` (default): window **or** meeting-process — most robust; window
-   *   title is preferred for metadata when present, else the process carries it.
-   * - `'process'`: only a `meetingProcess` match counts (window ignored). Best
-   *   when the meeting window is often minimized.
+   * - `'process'` (default): only a `meetingProcess` match counts (window
+   *   ignored). Avoids `desktopCapturer` entirely — no macOS Sequoia permission
+   *   dialog. Best when the meeting window is often minimized.
+   * - `'either'`: window **or** meeting-process — most robust; window title is
+   *   preferred for metadata when present, else the process carries it.
    * - `'window'`: only a window-title match; the process is attached as a cue.
    * - `'window+process'`: require BOTH a window title and a `process` of the
    *   SAME rule — strictest, fewest false positives.
