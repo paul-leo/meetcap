@@ -4,20 +4,27 @@
   "description": "Renderer-process half of meetcap: detector client + mic & system (loopback) audio capture, mix, record to webm, save. Framework-agnostic + React/Vue hooks. Electron.",
   "license": "MIT",
   "type": "commonjs",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/cjs/index.js"
     },
     "./react": {
-      "types": "./dist/react.d.ts",
-      "default": "./dist/react.js"
+      "types": "./dist/cjs/react.d.ts",
+      "import": "./dist/esm/react.js",
+      "require": "./dist/cjs/react.js",
+      "default": "./dist/cjs/react.js"
     },
     "./vue": {
-      "types": "./dist/vue.d.ts",
-      "default": "./dist/vue.js"
+      "types": "./dist/cjs/vue.d.ts",
+      "import": "./dist/esm/vue.js",
+      "require": "./dist/cjs/vue.js",
+      "default": "./dist/cjs/vue.js"
     },
     "./package.json": "./package.json"
   },
@@ -27,7 +34,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node ../../scripts/write-dual-pkg.mjs dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
