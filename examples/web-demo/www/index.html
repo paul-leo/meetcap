@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>meetcap-web demo</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font: 14px/1.5 -apple-system, system-ui, sans-serif; background: #101418; color: #e6e8ea; margin: 0; padding: 24px; }
+    main { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
+    h1 { font-size: 18px; margin: 0; }
+    .card { background: #171c22; border: 1px solid #232a33; border-radius: 10px; padding: 16px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button { background: #2b6cb0; color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 13px; }
+    button.ghost { background: transparent; border: 1px solid #3a4450; color: #cbd3db; }
+    button.danger { background: #9b2c2c; }
+    button:disabled { opacity: .45; cursor: default; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #232a33; font-size: 12px; }
+    .pill.ok { background: #1c4532; } .pill.bad { background: #63171b; } .pill.warn { background: #5f370e; }
+    .k { color: #8a94a0; font-size: 12px; }
+    #log { white-space: pre-wrap; font: 12px/1.6 ui-monospace, monospace; max-height: 220px; overflow: auto; color: #aeb6bf; }
+    #recordings .item { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid #232a33; flex-wrap: wrap; }
+    audio, video { max-width: 100%; }
+    .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #5f370e; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>meetcap-web <span class="k">— browser-only recording demo</span></h1>
+
+    <div class="card">
+      <div class="row" id="caps-row"><span class="k">capabilities:</span></div>
+      <div class="row" style="margin-top:6px" id="perm-row">
+        <span class="k">permissions:</span>
+        <span class="pill" id="perm-mic">mic: ?</span>
+        <span class="pill" id="perm-cam">camera: ?</span>
+        <button class="ghost" id="btn-perms">Request mic</button>
+        <button class="ghost" id="btn-perms-cam">Request mic + camera</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button id="btn-tone">● Record test tone</button>
+        <span class="k">synthetic OscillatorNode source — zero permissions, automation-friendly</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-mic">● Record mic</button>
+        <span class="k">getUserMedia — prompts once</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-camera">● Record camera</button>
+        <span class="k">getUserMedia video — prompts for Camera on first use; output becomes video/webm</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-display">● Record shared tab / screen</button>
+        <span class="k">getDisplayMedia — needs a real click (browser share picker)</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btn-stop" disabled>■ Stop</button>
+        <span class="pill" id="rec-state">idle</span>
+        <span class="pill" id="rec-chunks">chunks: 0</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <strong>Recordings <span class="k">(IndexedDB)</span></strong>
+        <button class="ghost" id="btn-refresh">Refresh</button>
+      </div>
+      <div id="recordings"></div>
+      <div id="player"></div>
+    </div>
+
+    <div class="card">
+      <div class="k" style="margin-bottom:8px">event log</div>
+      <div id="log"></div>
+    </div>
+  </main>
+  <script src="bundle.js"></script>
+</body>
+</html>

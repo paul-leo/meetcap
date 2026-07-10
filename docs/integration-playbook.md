@@ -6,6 +6,15 @@ debounced meeting boundaries, and multi-window apps. If you built workarounds
 for any of these on meetcap ≤0.1.x, see the [migration table](#migrating-off-01x-workarounds)
 at the end — each one now has a first-class replacement.
 
+## Picking a package (layered since 0.5)
+
+Pure Electron → `meetcap-renderer` · pure web → `meetcap-web` · hybrid
+codebase that records on both → `meetcap-client` (runtime negotiation) ·
+hybrid whose web build must NOT record → `meetcap-renderer` + gate with
+`isBridgeAvailable()`, or alias `meetcap-renderer/stub` in the web bundler to
+drop recording code entirely. Details and the web capture matrix:
+[web-recording](./web-recording.md).
+
 ## Custom session partitions
 
 The loopback display-media handler is bound **per session**. If your windows

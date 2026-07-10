@@ -1,0 +1,51 @@
+{
+  "name": "meetcap-capture",
+  "version": "0.4.0",
+  "description": "Shared recording engine for meetcap — the backend-agnostic capture state machine (events, pause accounting, crash-safe chunk ordering) that meetcap-renderer (Electron) and meetcap-web (browser) plug their capture/persistence/permission backends into.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/cjs/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node ../../scripts/write-dual-pkg.mjs dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paul-leo/meetcap.git",
+    "directory": "packages/capture"
+  },
+  "keywords": [
+    "recorder",
+    "mediarecorder",
+    "audio",
+    "capture",
+    "meetcap"
+  ],
+  "dependencies": {
+    "meetcap-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

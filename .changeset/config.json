@@ -3,9 +3,20 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
-  "linked": [["meetcap-core", "meetcap-main", "meetcap-renderer"]],
+  "linked": [
+    [
+      "meetcap-core",
+      "meetcap-main",
+      "meetcap-renderer",
+      "meetcap-capture",
+      "meetcap-web",
+      "meetcap-client"
+    ]
+  ],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["electron-demo"]
+  "ignore": [
+    "electron-demo"
+  ]
 }

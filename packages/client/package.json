@@ -1,0 +1,54 @@
+{
+  "name": "meetcap-client",
+  "version": "0.4.0",
+  "description": "Runtime negotiation for hybrid web/Electron codebases — one install that records via meetcap-renderer when the Electron preload bridge is present (loopback system audio, disk persistence, meeting detection) and falls back to meetcap-web (browser capture + IndexedDB) everywhere else.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/cjs/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node ../../scripts/write-dual-pkg.mjs dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paul-leo/meetcap.git",
+    "directory": "packages/client"
+  },
+  "keywords": [
+    "recorder",
+    "electron",
+    "hybrid",
+    "progressive-enhancement",
+    "meetcap"
+  ],
+  "dependencies": {
+    "meetcap-capture": "workspace:*",
+    "meetcap-core": "workspace:*",
+    "meetcap-renderer": "workspace:*",
+    "meetcap-web": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

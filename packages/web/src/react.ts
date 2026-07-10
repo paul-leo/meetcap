@@ -1,26 +1,25 @@
 /**
- * React hooks over the recorder and detector.
+ * React hook over the web recorder. Duplicate-adapted from meetcap-renderer's
+ * hook (the repo's parallel-copy pattern) — no detector hook here: meeting
+ * detection needs a native process and doesn't exist on the pure web.
  *
- *   import { useRecorder, useMeetingDetector } from 'meetcap-renderer/react'
- *   const { meeting, isInMeeting } = useMeetingDetector({ onDetected: showBanner })
+ *   import { useRecorder } from 'meetcap-web/react'
  *   const { start, stop, state, elapsedMs, permissionIssue } = useRecorder({ shared: true })
  *
  * `react` is an optional peer dependency.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { MeetingInfo, RecordingResult } from 'meetcap-core'
+import type { MeetingInfo } from 'meetcap-core'
+import { PermissionDeniedError, type RecorderState, type RecordingChunk } from 'meetcap-capture'
 import {
   createRecorder,
-  type CreateRecorderOptions,
-  type Recorder,
-  type RecorderState,
-  type RecordingChunk,
-  type StartOptions,
+  type WebCreateRecorderOptions,
+  type WebRecorder,
+  type WebRecordingResult,
+  type WebStartOptions,
 } from './recorder'
-import { createDetectorClient, type DetectorClient } from './detector'
-import { PermissionDeniedError } from 'meetcap-capture'
 
-export interface UseRecorderOptions extends CreateRecorderOptions {
+export interface UseRecorderOptions extends WebCreateRecorderOptions {
   /** Called per timeslice — use for incremental/segmented upload. */
   onChunk?: (chunk: RecordingChunk) => void
   /**
@@ -29,7 +28,7 @@ export interface UseRecorderOptions extends CreateRecorderOptions {
    * component and the recording keeps running (route changes don't kill it).
    * The shared instance is created once, with the options of the first mount
    * that asked for it. Default false: per-component recorder, destroyed on
-   * unmount (previous behavior).
+   * unmount.
    */
   shared?: boolean
 }
@@ -43,32 +42,28 @@ export interface PermissionIssue {
 
 export interface UseRecorder {
   state: RecorderState
-  /** The last finished recording (already written to disk unless persistToDisk is off). */
-  lastResult: RecordingResult | null
+  lastResult: WebRecordingResult | null
   /** Live recorded duration (ms), paused time excluded; corrected from `complete`. */
   elapsedMs: number
   /** Last recorder error (cleared when the next start() begins). */
   error: unknown
   /** Set when `error` is a PermissionDeniedError; null otherwise. */
   permissionIssue: PermissionIssue | null
-  /** Rejects on failure (e.g. PermissionDeniedError) — same contract as recorder.start(). */
-  start: (meeting?: MeetingInfo | null, opts?: StartOptions) => Promise<void>
+  /** Rejects on failure — same contract as recorder.start(). Display capture needs a real click. */
+  start: (meeting?: MeetingInfo | null, opts?: WebStartOptions) => Promise<void>
   pause: () => void
   resume: () => void
   stop: () => void
 }
 
-// One app-global recorder for `shared: true` mounts, created with the options
-// of the first such mount. Never destroyed — a recording must survive any
-// individual component.
-let sharedRecorder: Recorder | null = null
-const getSharedRecorder = (options?: CreateRecorderOptions): Recorder =>
+let sharedRecorder: WebRecorder | null = null
+const getSharedRecorder = (options?: WebCreateRecorderOptions): WebRecorder =>
   (sharedRecorder ??= createRecorder(options))
 
 export function useRecorder(options?: UseRecorderOptions): UseRecorder {
-  const ref = useRef<Recorder | null>(null)
+  const ref = useRef<WebRecorder | null>(null)
   const [state, setState] = useState<RecorderState>('idle')
-  const [lastResult, setLastResult] = useState<RecordingResult | null>(null)
+  const [lastResult, setLastResult] = useState<WebRecordingResult | null>(null)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [error, setError] = useState<unknown>(null)
 
@@ -114,7 +109,7 @@ export function useRecorder(options?: UseRecorderOptions): UseRecorder {
       prev = s
       setState(s)
     }
-    const onComplete = (r: RecordingResult) => {
+    const onComplete = (r: WebRecordingResult) => {
       stopTicker()
       elapsed = r.durationMs
       setElapsedMs(r.durationMs)
@@ -162,52 +157,4 @@ export function useRecorder(options?: UseRecorderOptions): UseRecorder {
     resume: () => ref.current?.resume(),
     stop: () => ref.current?.stop(),
   }
-}
-
-export interface UseMeetingDetectorOptions {
-  /** A meeting occurrence began (also fired once for a meeting already in progress at startup). */
-  onDetected?: (meeting: MeetingInfo) => void
-  /** The meeting ended — same `meetingId` as its onDetected. */
-  onEnded?: (meeting: MeetingInfo) => void
-}
-
-export interface UseMeetingDetector {
-  /** The tracked meeting occurrence (with its `meetingId`), or null. */
-  meeting: MeetingInfo | null
-  isInMeeting: boolean
-}
-
-// One app-global detector client shared by every useMeetingDetector mount,
-// kept for the app's lifetime — detection state must not reset when
-// components unmount. syncInitial catches a meeting already in progress.
-let sharedDetector: DetectorClient | null = null
-const getSharedDetector = (): DetectorClient =>
-  (sharedDetector ??= createDetectorClient({ syncInitial: true }))
-
-export function useMeetingDetector(options: UseMeetingDetectorOptions = {}): UseMeetingDetector {
-  const [meeting, setMeeting] = useState<MeetingInfo | null>(null)
-  // Latest-ref pattern: callbacks may change every render without resubscribing.
-  const callbacks = useRef(options)
-  callbacks.current = options
-
-  useEffect(() => {
-    const client = getSharedDetector()
-    // Level sync for late mounts; callbacks stay edge-only (the initial probe
-    // fires meeting-detected once, through the client's handler set).
-    setMeeting(client.current)
-    const onDetected = (m: MeetingInfo) => {
-      setMeeting(m)
-      callbacks.current.onDetected?.(m)
-    }
-    const onEnded = (m: MeetingInfo) => {
-      setMeeting(null)
-      callbacks.current.onEnded?.(m)
-    }
-    client.on('meeting-detected', onDetected).on('meeting-ended', onEnded)
-    return () => {
-      client.off('meeting-detected', onDetected).off('meeting-ended', onEnded)
-    }
-  }, [])
-
-  return { meeting, isInMeeting: meeting !== null }
 }

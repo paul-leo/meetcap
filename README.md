@@ -15,6 +15,9 @@ It ships as a main-process half, a renderer-process half, and a shared core — 
 | [`meetcap-main`](packages/main) | main | Detection (window-title + process poller, rule engine) **and** recorder setup (macOS loopback flags + streaming save + media-access). |
 | [`meetcap-renderer`](packages/renderer) | renderer | Detector client (subscribe to events) **and** capture: mic + system audio, mix, record, save. Framework-agnostic + React/Vue hooks. |
 | [`meetcap-core`](packages/core) | shared | Shared types, the IPC contract, and the `window.meetcap` preload bridge. |
+| [`meetcap-web`](packages/web) | browser | Browser-native recording: mic / camera / shared tab or screen / WebRTC streams, IndexedDB crash-safe persistence. No Electron. |
+| [`meetcap-client`](packages/client) | hybrid | Runtime negotiation for web+Electron codebases — one install, right backend. |
+| [`meetcap-capture`](packages/capture) | shared | The backend-agnostic recording engine the above plug into. |
 
 The split is by **process**, not by feature — so you never import a main-only API (`desktopCapturer`, `ps-list`, loopback flags) into a renderer bundle. Within each half, detection and recording are independent: use one, the other, or both.
 

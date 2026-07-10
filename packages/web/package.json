@@ -1,7 +1,7 @@
 {
-  "name": "meetcap-renderer",
+  "name": "meetcap-web",
   "version": "0.4.0",
-  "description": "Renderer-process half of meetcap: detector client + mic & system (loopback) audio capture, mix, record to webm, save. Framework-agnostic + React/Vue hooks. Electron.",
+  "description": "Browser-native recording for meetcap — capture the mic, camera, a shared tab/screen (getDisplayMedia) or caller-provided streams (e.g. WebRTC remote audio), mix, record to webm, and persist crash-safe to IndexedDB. No Electron required; pairs with meetcap-renderer via meetcap-client for hybrid apps.",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/cjs/index.js",
@@ -26,12 +26,6 @@
       "require": "./dist/cjs/vue.js",
       "default": "./dist/cjs/vue.js"
     },
-    "./stub": {
-      "types": "./dist/cjs/stub.d.ts",
-      "import": "./dist/esm/stub.js",
-      "require": "./dist/cjs/stub.js",
-      "default": "./dist/cjs/stub.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -50,24 +44,20 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paul-leo/meetcap.git",
-    "directory": "packages/renderer"
+    "directory": "packages/web"
   },
   "keywords": [
-    "electron",
-    "zoom",
-    "meeting",
-    "detection",
-    "audio",
     "recorder",
-    "loopback",
     "mediarecorder",
-    "react",
-    "vue",
+    "getdisplaymedia",
+    "tab-audio",
+    "audio",
+    "indexeddb",
     "meetcap"
   ],
   "dependencies": {
-    "meetcap-core": "workspace:*",
-    "meetcap-capture": "workspace:*"
+    "meetcap-capture": "workspace:*",
+    "meetcap-core": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=17",
@@ -83,6 +73,7 @@
   },
   "devDependencies": {
     "@types/react": "^18.3.18",
+    "fake-indexeddb": "^6.0.0",
     "react": "^18.3.1",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8",
