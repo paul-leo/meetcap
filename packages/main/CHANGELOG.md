@@ -1,5 +1,27 @@
 # meetcap-main
 
+## 0.3.0
+
+### Minor Changes
+
+- 7e9a010: Detection now defaults to process-only everywhere; window detection is opt-in.
+
+  `resolveMeeting`'s default policy moves from `'either'` to `'process'`, aligning it with `startDetector` (whose default was already `'process'`). Rationale: window enumeration requires elevated permissions on macOS (screen recording / Sequoia picker) and flickers under real desktop conditions (a minimized or fully occluded window drops out of the window list), while a meeting-scoped process signal needs zero permissions and is stable. Opt into window signals explicitly with `require: 'either'` / `'window'` / `'window+process'`.
+
+  Note: under the default, only rules with a `meetingProcess` are detectable (of the presets, Zoom). The demo gains a `MEETCAP_DEMO_REQUIRE` env knob for opting into window detection in tests.
+
+- f6a61b2: Recordings can now include a video track — the user's screen or camera — chosen per recording:
+
+  - `recorder.start(meeting, { video: 'screen' | 'camera' })` adds a video track; output becomes `video/webm` (VP9→VP8→bare fallback via new `pickVideoMimeType`). Audio-only stays the default and unchanged.
+  - `'screen'` reuses the display capture that already provides loopback system audio (no extra permission); `'camera'` requests the camera via `getUserMedia` (native prompt on first use).
+  - `RecordingResult.videoSource: 'screen' | 'camera' | null` reports what was captured; `PermissionStatus` gains `camera` (mediaAccess/requestPermissions snapshots — no camera pre-prompt, it appears on the first camera recording); a denied camera rejects `start()` with `PermissionDeniedError` whose `denied` includes `'camera'`; hooks' `permissionIssue` gains `camera: boolean`.
+  - Demo: video-source selector + `<video>` preview of the saved file.
+
+### Patch Changes
+
+- Updated dependencies [f6a61b2]
+  - meetcap-core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
