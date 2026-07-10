@@ -196,6 +196,20 @@ export interface MeetcapBridge {
   closeRecording(id: string, durationMs?: number): Promise<CloseRecordingResult>
   /** List recordings that never finalized (resumable after a crash/exit). */
   listInterruptedRecordings(): Promise<InterruptedRecording[]>
+  /**
+   * Read a recording file's bytes (e.g. to build a File/Blob for upload).
+   * `filePath` must be inside the recordings directory (saveDir) — anything
+   * else is rejected. Buffers cross the context bridge as Uint8Array.
+   */
+  readRecording(filePath: string): Promise<Uint8Array>
+  /**
+   * Delete a recording file (e.g. after a successful upload). Restricted to
+   * the recordings directory. Manifests whose segment files are all gone are
+   * cleaned up too, so deleted recordings never resurface as "interrupted".
+   */
+  deleteRecording(filePath: string): Promise<void>
+  /** Whether a recording file still exists on disk (restricted to saveDir). */
+  recordingExists(filePath: string): Promise<boolean>
   /** Enable the loopback display-media handler (electron-audio-loopback). */
   enableLoopbackAudio(): Promise<void>
   /** Disable the loopback display-media handler. */
@@ -224,6 +238,9 @@ export const IPC = {
   recordingWrite: 'meetcap:recording-write',
   recordingClose: 'meetcap:recording-close',
   recordingList: 'meetcap:recording-list',
+  recordingRead: 'meetcap:recording-read',
+  recordingDelete: 'meetcap:recording-delete',
+  recordingExists: 'meetcap:recording-exists',
   enableLoopback: 'enable-loopback-audio',
   disableLoopback: 'disable-loopback-audio',
 } as const

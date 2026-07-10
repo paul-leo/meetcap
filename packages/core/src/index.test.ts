@@ -15,6 +15,9 @@ describe('IPC channel contract', () => {
       recordingWrite: 'meetcap:recording-write',
       recordingClose: 'meetcap:recording-close',
       recordingList: 'meetcap:recording-list',
+      recordingRead: 'meetcap:recording-read',
+      recordingDelete: 'meetcap:recording-delete',
+      recordingExists: 'meetcap:recording-exists',
       enableLoopback: 'enable-loopback-audio',
       disableLoopback: 'disable-loopback-audio',
     })

@@ -123,9 +123,9 @@ describe('resolveMeeting', () => {
 
 describe('createDetectionState', () => {
   // Deterministic occurrence ids: occ-0, occ-1, …
-  const stateWithIds = () => {
+  const stateWithIds = (endGraceMs?: number) => {
     let n = 0
-    return createDetectionState(() => `occ-${n++}`)
+    return createDetectionState({ generateId: () => `occ-${n++}`, endGraceMs })
   }
   const zoom = { id: 'zoom', app: 'Zoom', windowName: 'Zoom会议' }
   const teams = { id: 'teams', app: 'Microsoft Teams', windowName: 'Standup | Teams' }
@@ -176,5 +176,47 @@ describe('createDetectionState', () => {
     const s = createDetectionState()
     const [evt] = s.update(zoom)
     expect(evt.meeting.meetingId).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  describe('endGraceMs', () => {
+    it('suppresses the ended event until the grace window elapses', () => {
+      const s = stateWithIds(5000)
+      s.update(zoom, 0)
+      expect(s.update(null, 1000)).toEqual([]) // disappearance noticed, grace starts
+      expect(s.update(null, 4000)).toEqual([]) // still within grace
+      expect(s.current?.meetingId).toBe('occ-0') // meeting still considered active
+      expect(s.update(null, 6000)).toEqual([
+        { type: 'meeting-ended', meeting: { ...zoom, meetingId: 'occ-0' } },
+      ])
+      expect(s.current).toBeNull()
+    })
+
+    it('a reappearance within grace is the same continuous meeting', () => {
+      const s = stateWithIds(5000)
+      s.update(zoom, 0)
+      s.update(null, 1000)
+      expect(s.update(zoom, 3000)).toEqual([]) // revived — no ended, no re-detected
+      expect(s.current?.meetingId).toBe('occ-0')
+      // ...and a later real end starts a fresh grace window
+      s.update(null, 10_000)
+      expect(s.update(null, 14_000)).toEqual([])
+      expect(s.update(null, 15_000)).toHaveLength(1)
+    })
+
+    it('a different meeting during grace ends the old one immediately', () => {
+      const s = stateWithIds(5000)
+      s.update(zoom, 0)
+      s.update(null, 1000)
+      expect(s.update(teams, 2000)).toEqual([
+        { type: 'meeting-ended', meeting: { ...zoom, meetingId: 'occ-0' } },
+        { type: 'meeting-detected', meeting: { ...teams, meetingId: 'occ-1' } },
+      ])
+    })
+
+    it('grace 0 (default) ends on the next null poll', () => {
+      const s = stateWithIds()
+      s.update(zoom, 0)
+      expect(s.update(null, 1)).toHaveLength(1)
+    })
   })
 })

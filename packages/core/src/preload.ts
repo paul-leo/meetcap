@@ -46,6 +46,12 @@ export function exposeMeetcapBridge(
       ipcRenderer.invoke(IPC.recordingClose, { id, durationMs }) as ReturnType<MeetcapBridge['closeRecording']>,
     listInterruptedRecordings: () =>
       ipcRenderer.invoke(IPC.recordingList) as ReturnType<MeetcapBridge['listInterruptedRecordings']>,
+    readRecording: (filePath: string) =>
+      ipcRenderer.invoke(IPC.recordingRead, { filePath }) as ReturnType<MeetcapBridge['readRecording']>,
+    deleteRecording: (filePath: string) =>
+      ipcRenderer.invoke(IPC.recordingDelete, { filePath }) as Promise<void>,
+    recordingExists: (filePath: string) =>
+      ipcRenderer.invoke(IPC.recordingExists, { filePath }) as Promise<boolean>,
     enableLoopbackAudio: () => ipcRenderer.invoke(IPC.enableLoopback) as Promise<void>,
     disableLoopbackAudio: () => ipcRenderer.invoke(IPC.disableLoopback) as Promise<void>,
   }
