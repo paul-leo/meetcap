@@ -89,34 +89,40 @@ describe('resolveMeeting', () => {
     expect(resolveMeeting([], [proc('zoom.us')], { require: 'process' })).toBeNull()
   })
 
-  it('either policy (default): survives a minimized window via meeting process', () => {
+  it('default policy is process: window detection stays OFF unless opted in', () => {
+    // A perfect window-title match alone must NOT detect under the default —
+    // zoom.us is running but its meeting-only process (CptHost) is not.
+    expect(resolveMeeting([win('Zoom会议')], [proc('zoom.us')])).toBeNull()
+  })
+
+  it('default policy (process): survives a minimized window via meeting process', () => {
     // window gone, but CptHost alive → still detected
     const m = resolveMeeting([], [proc('CptHost')])
     expect(m?.id).toBe('zoom')
     expect(m?.process).toBe('CptHost')
   })
 
-  it('either policy: window present is preferred for metadata (windowName kept)', () => {
-    const m = resolveMeeting([win('Zoom会议')], [proc('CptHost')])
+  it('either policy (opt-in): window present is preferred for metadata (windowName kept)', () => {
+    const m = resolveMeeting([win('Zoom会议')], [proc('CptHost')], { require: 'either' })
     expect(m?.id).toBe('zoom')
     expect(m?.windowName).toBe('Zoom会议')
     expect(m?.process).toBe('CptHost')
   })
 
   it('either policy: app open, no meeting (zoom.us only, no window) → null', () => {
-    expect(resolveMeeting([], [proc('zoom.us')])).toBeNull()
+    expect(resolveMeeting([], [proc('zoom.us')], { require: 'either' })).toBeNull()
   })
 
   it('supports a fully custom rule', () => {
     const rules: MeetingRule[] = [{ id: 'mymeet', app: 'MyMeet', window: [/MyMeet 通话/], process: [/mymeet/i] }]
-    const m = resolveMeeting([win('MyMeet 通话中')], [proc('mymeet-helper')], { rules })
+    const m = resolveMeeting([win('MyMeet 通话中')], [proc('mymeet-helper')], { rules, require: 'either' })
     expect(m?.id).toBe('mymeet')
     expect(m?.app).toBe('MyMeet')
   })
 
   it('supports a function window matcher', () => {
     const rules: MeetingRule[] = [{ id: 'fn', app: 'Fn', window: (t) => t.includes('SECRET') }]
-    expect(resolveMeeting([win('a SECRET call')], [], { rules })?.id).toBe('fn')
+    expect(resolveMeeting([win('a SECRET call')], [], { rules, require: 'either' })?.id).toBe('fn')
     expect(resolveMeeting([win('nothing')], [], { rules })).toBeNull()
   })
 })

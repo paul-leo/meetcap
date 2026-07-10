@@ -7,14 +7,19 @@ export interface DetectorConfig {
   rules?: MeetingRule[]
   /**
    * Which signal proves "in a meeting". A window title is precise but fragile
-   * (a minimized/hidden window vanishes from `desktopCapturer`); a meeting-only
-   * process (`rule.meetingProcess`, e.g. Zoom's `CptHost`) is robust to that.
+   * (a minimized/hidden — or fully occluded — window vanishes from
+   * `desktopCapturer`), and enumerating windows needs elevated permissions on
+   * macOS; a meeting-only process (`rule.meetingProcess`, e.g. Zoom's
+   * `CptHost`) needs no permissions and is robust to all of that.
    *
    * - `'process'` (default): only a `meetingProcess` match counts (window
-   *   ignored). Avoids `desktopCapturer` entirely — no macOS Sequoia permission
-   *   dialog. Best when the meeting window is often minimized.
-   * - `'either'`: window **or** meeting-process — most robust; window title is
-   *   preferred for metadata when present, else the process carries it.
+   *   ignored). Avoids `desktopCapturer` entirely — no screen-recording
+   *   permission, no macOS Sequoia picker dialog, no occlusion flicker.
+   *   Window detection stays OFF unless you opt in. Note: only rules with a
+   *   `meetingProcess` are detectable (of the presets, Zoom).
+   * - `'either'`: window **or** meeting-process — broadest rule coverage;
+   *   window title is preferred for metadata when present. Opt-in: touches
+   *   desktopCapturer.
    * - `'window'`: only a window-title match; the process is attached as a cue.
    * - `'window+process'`: require BOTH a window title and a `process` of the
    *   SAME rule — strictest, fewest false positives.
@@ -97,7 +102,9 @@ export function resolveMeeting(
   config: DetectorConfig = {},
 ): MeetingInfo | null {
   const rules = config.rules ?? presets
-  const policy = config.require ?? 'either'
+  // Default aligned with startDetector: process-only — detection then needs
+  // no window enumeration (permissions) at all. Window signals are opt-in.
+  const policy = config.require ?? 'process'
   const win = matchWindow(sources, rules)
 
   if (policy === 'window') {
@@ -119,7 +126,7 @@ export function resolveMeeting(
     return procMatch ? fromProcess(procMatch, win) : null
   }
 
-  // 'either' (default): window OR meeting-process; prefer richer window metadata.
+  // 'either' (opt-in): window OR meeting-process; prefer richer window metadata.
   if (win) return withProcessCue(win, procs, rules)
   if (procMatch) return fromProcess(procMatch, win)
   return null
