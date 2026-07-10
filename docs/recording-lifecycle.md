@@ -29,7 +29,7 @@ The two events that matter most: **`meeting-detected` to begin, `meeting-ended` 
 // main.ts — BEFORE app.whenReady()
 import { initRecorderMain, startDetector } from 'meetcap-main'
 initRecorderMain()                                   // loopback flags + recording IPC
-app.whenReady().then(() => { createWindow(); startDetector({ require: 'either' }) })
+app.whenReady().then(() => { createWindow(); startDetector() }) // process-only detection: zero extra permissions
 
 // preload.ts
 import { contextBridge, ipcRenderer } from 'electron'
@@ -219,8 +219,12 @@ try {
 Every rejection is also emitted as an `error` event, so fire-and-forget callers
 keep a signal — but add a `.catch()` to avoid unhandled-rejection noise.
 
-Built-in detection rules need no permissions and work out of the box — `startDetector()`
-defaults to the `presets` (Zoom / Teams / 腾讯会议 / 飞书).
+Detection itself needs no permissions by default: `startDetector()` runs
+process-only (`require: 'process'`) — no window enumeration, no
+screen-recording permission, no macOS picker dialog. Of the built-in `presets`
+(Zoom / Teams / 腾讯会议 / 飞书), Zoom is detectable this way (its
+meeting-scoped `CptHost`/`aomhost` helper); the others detect by window title,
+which is **opt-in** via `require: 'either'` and touches `desktopCapturer`.
 
 ## Try it — the demo
 

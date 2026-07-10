@@ -68,7 +68,7 @@ meeting helper process blips, and each flicker would fire a false
 same edges:
 
 ```ts
-startDetector({ require: 'either', endGraceMs: 20_000 })
+startDetector({ endGraceMs: 20_000 })
 ```
 
 Semantics:

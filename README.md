@@ -28,7 +28,7 @@ npm install meetcap-core meetcap-main meetcap-renderer
 // main.ts — runs before app.whenReady()
 import { initRecorderMain, startDetector } from 'meetcap-main'
 initRecorderMain()
-app.whenReady().then(() => { createWindow(); startDetector({ require: 'either' }) })
+app.whenReady().then(() => { createWindow(); startDetector() }) // process-only detection: zero extra permissions
 
 // preload.ts
 import { contextBridge, ipcRenderer } from 'electron'

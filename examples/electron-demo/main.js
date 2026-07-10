@@ -33,15 +33,20 @@ function createWindow(index = 0) {
 //   MEETCAP_DEMO_WINDOWS=2       — multi-window: every window receives the same
 //                                  detector broadcasts (gate your UI in real apps)
 //   MEETCAP_DEMO_END_GRACE_MS=8000 — debounce meeting-ended to observe grace behavior
+//   MEETCAP_DEMO_REQUIRE=either  — opt into window-title detection (needs window
+//                                  enumeration; used by tests that fake a meeting
+//                                  by retitling a window)
 const windowCount = Math.max(1, Number(process.env.MEETCAP_DEMO_WINDOWS) || 1)
 const endGraceMs = Number(process.env.MEETCAP_DEMO_END_GRACE_MS) || 0
+const require_ = process.env.MEETCAP_DEMO_REQUIRE
 
 app.whenReady().then(() => {
   for (let i = 0; i < windowCount; i++) createWindow(i)
   // Main-process poller; broadcasts meeting-detected / meeting-ended to renderers.
-  // 'either' = window OR meeting-only process (Zoom's CptHost/aomhost), so a
-  // minimized/hidden meeting window doesn't read as "meeting ended".
-  startDetector({ intervalMs: 3000, require: 'either', endGraceMs })
+  // Default policy is process-only (Zoom's meeting-scoped CptHost/aomhost):
+  // no window enumeration, no screen-recording permission for detection, and
+  // a minimized/hidden meeting window doesn't read as "meeting ended".
+  startDetector({ intervalMs: 3000, endGraceMs, ...(require_ ? { require: require_ } : {}) })
 })
 
 app.on('window-all-closed', () => app.quit())
