@@ -1,5 +1,18 @@
 // meetcap Recorder — panel UI. Everything capture-related is meetcap 0.5.0;
-// this file is product glue: tray state, timer, banner, library.
+// this file is product glue: mode selection, tray state, timer, banner, library.
+// Dev-only: connect harness-fe to the local solo gateway so tests can drive
+// the panel (build:dist strips this — the shipped app never reaches for it).
+declare const __HARNESS_ENABLED__: boolean
+if (__HARNESS_ENABLED__) {
+  ;(window as unknown as { __HARNESS_FE__?: unknown }).__HARNESS_FE__ = {
+    projectId: 'meetcap-recorder',
+    mcpUrl: 'ws://127.0.0.1:47620/ws',
+    overlay: false,
+    consent: 'off',
+  }
+  void import('@harness-fe/runtime')
+}
+
 import {
   createDetectorClient,
   createRecorder,
@@ -22,18 +35,48 @@ declare global {
 }
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement
+const status = (t: string) => ($('status-line').textContent = t)
+
+// ── capture mode (segmented) ──────────────────────────────────────────────────
+type Mode = '' | 'screen' | 'camera'
+let mode: Mode = 'screen'
+
+const HINTS: Record<Mode, string[]> = {
+  screen: ['Screen', 'System audio', 'Microphone'],
+  '': ['System audio', 'Microphone'],
+  camera: ['Camera', 'Microphone'],
+}
+
+function renderHint() {
+  $('capture-hint').innerHTML = HINTS[mode].map((h) => `<span class="chip">${h}</span>`).join('')
+}
+
+for (const el of Array.from(document.querySelectorAll<HTMLElement>('.mode'))) {
+  el.onclick = () => {
+    document.querySelectorAll('.mode').forEach((m) => m.classList.remove('active'))
+    el.classList.add('active')
+    mode = (el.dataset.mode ?? '') as Mode
+    renderHint()
+  }
+}
+renderHint()
 
 // ── permissions ───────────────────────────────────────────────────────────────
 async function refreshPerms() {
   const p = await getPermissionStatus()
-  const cls: Record<string, string> = { granted: 'ok', denied: 'bad', restricted: 'bad', 'not-determined': 'warn' }
-  const set = (id: string, label: string, v: string) => {
-    const el = $(id)
-    el.textContent = `${label}: ${v}`
-    el.className = 'pill ' + (cls[v] ?? '')
+  const chips = $('perm-chips')
+  chips.innerHTML = ''
+  const add = (label: string, v: string, pane: 'screen' | 'microphone') => {
+    if (v === 'granted' || v === 'n/a') return // only surface problems
+    const c = document.createElement('span')
+    c.className = 'chip bad'
+    c.textContent = `${label}: ${v === 'not-determined' ? 'needs setup' : v}`
+    c.title = 'Open System Settings'
+    c.onclick = () => void openPrivacySettings(pane)
+    chips.appendChild(c)
   }
-  set('perm-screen', 'screen', p.screen)
-  set('perm-mic', 'mic', p.microphone)
+  add('Screen', p.screen, 'screen')
+  add('Mic', p.microphone, 'microphone')
 }
 void refreshPerms()
 
@@ -63,10 +106,9 @@ const stopTick = () => {
 
 recorder.on('statechange', (s) => {
   window.recorderApp.reportState(s)
-  const btn = $('btn-record') as HTMLButtonElement
+  document.body.classList.toggle('recording', s !== 'idle')
+  document.body.classList.toggle('paused', s === 'paused')
   if (s === 'recording') {
-    btn.textContent = '■ Stop & save'
-    btn.className = 'big danger'
     $('btn-pause').style.display = ''
     $('btn-resume').style.display = 'none'
     startTick()
@@ -75,49 +117,46 @@ recorder.on('statechange', (s) => {
     $('btn-resume').style.display = ''
     stopTick()
   } else {
-    btn.textContent = '● Start recording'
-    btn.className = 'big'
-    $('btn-pause').style.display = 'none'
-    $('btn-resume').style.display = 'none'
     stopTick()
   }
 })
 
+const fmtDur = (ms: number) => {
+  const s = Math.round(ms / 1000)
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`
+}
+
 recorder.on('complete', (r) => {
-  elapsed = r.durationMs
-  renderTimer()
-  status(`saved · ${(r.durationMs / 1000).toFixed(1)}s · systemAudio=${r.hasSystemAudio}${r.videoSource ? ' · ' + r.videoSource : ''}`)
+  const parts = [fmtDur(r.durationMs)]
+  if (r.videoSource) parts.push(r.videoSource === 'screen' ? 'screen' : 'camera')
+  if (r.hasSystemAudio) parts.push('system audio')
+  status(`Saved · ${parts.join(' · ')}`)
   elapsed = 0
+  renderTimer()
   void refreshLibrary()
 })
 
-recorder.on('error', (e) => status('error: ' + ((e as Error)?.message || String(e))))
-
-const status = (t: string) => ($('status-line').textContent = t)
+recorder.on('error', (e) => {
+  if (!(e instanceof PermissionDeniedError)) status(((e as Error)?.message || String(e)).replace(/^meetcap: /, ''))
+})
 
 async function startRecording(meeting: MeetingInfo | null) {
-  const video = ($('video-source') as HTMLSelectElement).value as '' | 'screen' | 'camera'
   elapsed = 0
   renderTimer()
-  status('starting…')
+  status('')
   try {
-    await recorder.start(meeting, video ? { video } : {})
-    status(video ? `recording ${video} + audio` : 'recording audio')
+    await recorder.start(meeting, mode ? { video: mode } : {})
   } catch (err) {
     if (err instanceof PermissionDeniedError) {
-      status(`permission denied: ${err.denied.join(', ')} — opening System Settings`)
+      status(`Permission needed: ${err.denied.join(', ')} — opening System Settings`)
       for (const pane of err.denied) void openPrivacySettings(pane)
-    } else {
-      status('start failed: ' + ((err as Error)?.message || String(err)))
     }
     void refreshPerms()
   }
 }
 
-$('btn-record').onclick = () => {
-  if (recorder.state === 'idle') void startRecording(currentMeeting)
-  else recorder.stop()
-}
+$('btn-record').onclick = () => void startRecording(currentMeeting)
+$('btn-stop').onclick = () => recorder.stop()
 $('btn-pause').onclick = () => recorder.pause()
 $('btn-resume').onclick = () => recorder.resume()
 
@@ -139,39 +178,57 @@ detector.on('meeting-ended', (m) => {
 $('btn-banner-record').onclick = () => void startRecording(currentMeeting)
 
 // ── library ───────────────────────────────────────────────────────────────────
+const ICONS = {
+  film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6.5 7l1 13h9l1-13"/></svg>',
+}
+
 function fmtSize(n: number) {
   return n > 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'
+}
+function fmtWhen(ms: number) {
+  const d = Date.now() - ms
+  if (d < 60_000) return 'just now'
+  if (d < 3_600_000) return `${Math.floor(d / 60_000)}m ago`
+  if (d < 86_400_000) return `${Math.floor(d / 3_600_000)}h ago`
+  return new Date(ms).toLocaleDateString()
 }
 
 async function refreshLibrary() {
   const items = await window.recorderApp.library()
-  $('lib-count').textContent = items.length ? `· ${items.length}` : ''
+  $('lib-count').textContent = items.length ? `(${items.length})` : ''
   const root = $('library')
-  root.innerHTML = items.length ? '' : '<div class="k" style="padding-top:8px">no recordings yet — hit record</div>'
+  root.innerHTML = items.length ? '' : '<div class="empty">No recordings yet</div>'
   for (const it of items) {
     const div = document.createElement('div')
     div.className = 'item'
-    const name = document.createElement('span')
-    name.className = 'name'
-    name.title = it.name
-    name.textContent = `${it.name} · ${fmtSize(it.size)}`
-    div.appendChild(name)
-    const btn = (label: string, cls: string, fn: () => void) => {
+    div.innerHTML = `
+      <div class="thumb">${ICONS.film}</div>
+      <div class="meta">
+        <div class="t" title="${it.name}">${it.name.replace(/\.webm$/, '')}</div>
+        <div class="s">${fmtWhen(it.mtimeMs)} · ${fmtSize(it.size)}</div>
+      </div>
+      <div class="actions"></div>`
+    const actions = div.querySelector('.actions') as HTMLElement
+    const btn = (svg: string, cls: string, title: string, fn: () => void) => {
       const b = document.createElement('button')
-      b.textContent = label
-      b.className = cls
+      b.className = 'icon-btn ' + cls
+      b.title = title
+      b.innerHTML = svg
       b.onclick = fn
-      div.appendChild(b)
+      actions.appendChild(b)
     }
-    btn('Play', 'ghost', () => {
-      const media = document.createElement(it.name.includes('screen') || it.size > 5 << 20 ? 'video' : 'audio')
+    btn(ICONS.play, '', 'Play', () => {
+      const media = document.createElement('video')
       media.controls = true
+      media.autoplay = false
       media.src = `file://${it.filePath}`
       const player = $('player')
       player.innerHTML = ''
       player.appendChild(media)
     })
-    btn('Delete', 'ghost', async () => {
+    btn(ICONS.trash, 'danger', 'Delete', async () => {
       await deleteRecording(it.filePath)
       $('player').innerHTML = ''
       void refreshLibrary()
@@ -179,6 +236,5 @@ async function refreshLibrary() {
     root.appendChild(div)
   }
 }
-$('btn-refresh').onclick = () => void refreshLibrary()
 $('btn-open-folder').onclick = () => void window.recorderApp.openFolder()
 void refreshLibrary()

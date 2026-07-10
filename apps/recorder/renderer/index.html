@@ -4,77 +4,153 @@
   <meta charset="utf-8" />
   <title>meetcap Recorder</title>
   <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body { font: 13px/1.5 -apple-system, system-ui, sans-serif; background: #14171b; color: #e8eaec; margin: 0; padding: 14px; user-select: none; }
-    main { display: grid; gap: 12px; }
-    .card { background: #1b2026; border: 1px solid #262d35; border-radius: 12px; padding: 14px; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    button { background: #2b6cb0; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500; }
-    button.ghost { background: transparent; border: 1px solid #39424d; color: #cbd3db; }
-    button.danger { background: #b03030; }
-    button.big { width: 100%; padding: 12px; font-size: 15px; }
-    button:disabled { opacity: .4; cursor: default; }
-    select { background: #232a32; color: #e8eaec; border: 1px solid #39424d; border-radius: 7px; padding: 6px 8px; }
-    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #232a32; font-size: 11.5px; }
-    .pill.ok { background: #1c4532; } .pill.bad { background: #63171b; } .pill.warn { background: #5f370e; }
-    .k { color: #8a94a0; font-size: 11.5px; }
-    .timer { font: 600 26px/1 ui-monospace, monospace; letter-spacing: 1px; }
-    #banner { display: none; background: #14321f; border-color: #1f5a37; }
-    #banner.show { display: block; }
-    #library .item { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid #262d35; }
-    #library .item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-    audio, video { max-width: 100%; margin-top: 8px; border-radius: 8px; }
-    h3 { margin: 0 0 4px; font-size: 13px; }
+    :root {
+      color-scheme: dark;
+      --bg: #0f1115; --card: #171a20; --card-2: #1d2129; --border: #262b34;
+      --text: #eceef1; --muted: #8b93a1; --accent: #4c8dff; --accent-press: #3c7be8;
+      --rec: #ff453a; --ok: #32d74b;
+    }
+    * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+    html, body { height: 100%; }
+    body {
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      background: var(--bg); color: var(--text); margin: 0; padding: 16px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .titlebar { -webkit-app-region: drag; display: flex; align-items: center; justify-content: space-between; }
+    .brand { font-weight: 600; font-size: 13px; letter-spacing: .2px; display: flex; align-items: center; gap: 7px; }
+    .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); box-shadow: 0 0 0 3px rgba(255,69,58,.18); }
+    .perm-chips { display: flex; gap: 6px; -webkit-app-region: no-drag; }
+    .chip { font-size: 10.5px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+    .chip.bad { color: #ff8f88; border-color: #4a2320; background: #2a1715; cursor: pointer; }
+
+    /* meeting banner */
+    #banner { display: none; align-items: center; gap: 10px; background: linear-gradient(120deg, #14321f, #12251a); border: 1px solid #1f5a37; border-radius: 14px; padding: 12px 14px; }
+    #banner.show { display: flex; }
+    #banner .info { flex: 1; min-width: 0; }
+    #banner .title { font-weight: 600; font-size: 13px; }
+    #banner .sub { color: var(--muted); font-size: 11.5px; }
+    #banner button { white-space: nowrap; }
+
+    /* launcher card */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
+    .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .mode { -webkit-app-region: no-drag; display: flex; flex-direction: column; align-items: center; gap: 7px;
+      background: var(--card-2); border: 1px solid var(--border); border-radius: 13px; padding: 13px 6px 11px;
+      cursor: pointer; color: var(--muted); transition: all .12s ease; }
+    .mode svg { width: 21px; height: 21px; stroke: currentColor; }
+    .mode span { font-size: 11.5px; font-weight: 500; }
+    .mode:hover { border-color: #333a46; color: var(--text); }
+    .mode.active { border-color: var(--accent); color: var(--text); background: rgba(76,141,255,.10); }
+    .capture-hint { display: flex; gap: 6px; margin-top: 11px; }
+
+    button.cta { -webkit-app-region: no-drag; width: 100%; margin-top: 12px; border: 0; border-radius: 12px; padding: 12px;
+      background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .12s; }
+    button.cta:hover { background: var(--accent-press); }
+    button { font-family: inherit; }
+    .ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 9px; padding: 5px 10px; font-size: 11.5px; cursor: pointer; }
+    .ghost:hover { color: var(--text); border-color: #333a46; }
+    .primary-sm { background: var(--accent); border: 0; color: #fff; border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+    /* recording state: launcher morphs into a control surface */
+    body.recording .modes, body.recording .capture-hint, body.recording #btn-record.cta-idle { display: none; }
+    #rec-surface { display: none; flex-direction: column; align-items: center; gap: 12px; padding: 6px 0 2px; }
+    body.recording #rec-surface { display: flex; }
+    .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rec); animation: pulse 1.6s ease infinite; }
+    body.recording.paused .rec-dot { animation: none; opacity: .5; }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,69,58,.5); } 50% { box-shadow: 0 0 0 7px rgba(255,69,58,0); } }
+    .timer { font: 500 34px/1 "SF Mono", ui-monospace, monospace; letter-spacing: 1.5px; font-variant-numeric: tabular-nums; }
+    .rec-controls { display: flex; gap: 12px; }
+    .round { -webkit-app-region: no-drag; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border);
+      background: var(--card-2); color: var(--text); cursor: pointer; display: grid; place-items: center; transition: all .12s; }
+    .round svg { width: 17px; height: 17px; }
+    .round:hover { border-color: #3a4250; }
+    .round.stop { background: var(--rec); border-color: var(--rec); }
+    .round.stop:hover { background: #e63b31; }
+    #status-line { color: var(--muted); font-size: 11.5px; text-align: center; min-height: 16px; margin-top: 8px; }
+
+    /* library */
+    .lib-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .lib-head h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; white-space: nowrap; display: flex; gap: 5px; align-items: baseline; }
+    #library { display: flex; flex-direction: column; }
+    #library .empty { color: var(--muted); font-size: 12px; padding: 14px 2px; text-align: center; }
+    #library .item { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-top: 1px solid var(--border); }
+    #library .item:first-child { border-top: 0; }
+    #library .thumb { width: 30px; height: 30px; border-radius: 8px; background: var(--card-2); display: grid; place-items: center; color: var(--muted); flex: none; }
+    #library .thumb svg { width: 14px; height: 14px; }
+    #library .meta { flex: 1; min-width: 0; }
+    #library .meta .t { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #library .meta .s { color: var(--muted); font-size: 11px; }
+    #library .actions { display: flex; gap: 6px; opacity: 0; transition: opacity .12s; }
+    #library .item:hover .actions { opacity: 1; }
+    .icon-btn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+    .icon-btn svg { width: 13px; height: 13px; }
+    .icon-btn:hover { color: var(--text); border-color: #3a4250; }
+    .icon-btn.danger:hover { color: #ff8f88; border-color: #4a2320; }
+    audio, video { width: 100%; max-height: 200px; margin-top: 10px; border-radius: 10px; outline: none; background: #000; }
   </style>
 </head>
 <body>
-  <main>
-    <div class="card" id="banner">
-      <div class="row" style="justify-content:space-between">
-        <div><strong id="banner-app">Meeting</strong> <span class="k">detected — record it?</span></div>
-        <button id="btn-banner-record">● Record meeting</button>
-      </div>
-    </div>
+  <div class="titlebar">
+    <div class="brand"><span class="dot"></span> meetcap Recorder</div>
+    <div class="perm-chips" id="perm-chips"></div>
+  </div>
 
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <div class="row">
-          <span class="k">source</span>
-          <select id="video-source">
-            <option value="">audio only</option>
-            <option value="screen" selected>screen + audio</option>
-            <option value="camera">camera + audio</option>
-          </select>
-        </div>
-        <div class="row" id="perm-row">
-          <span class="pill" id="perm-screen">screen: ?</span>
-          <span class="pill" id="perm-mic">mic: ?</span>
-        </div>
-      </div>
-      <div class="row" style="margin: 12px 0 8px; justify-content:center">
-        <span class="timer" id="timer">00:00</span>
-      </div>
-      <button class="big" id="btn-record">● Start recording</button>
-      <div class="row" style="margin-top:8px; justify-content:center">
-        <button class="ghost" id="btn-pause" style="display:none">⏸ Pause</button>
-        <button class="ghost" id="btn-resume" style="display:none">▶ Resume</button>
-      </div>
-      <div class="k" id="status-line" style="margin-top:8px; text-align:center"></div>
+  <div id="banner">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#32d74b" stroke-width="1.8"><path d="M15 10l4.5-2.5v9L15 14v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3z"/></svg>
+    <div class="info">
+      <div class="title"><span id="banner-app">Meeting</span> is live</div>
+      <div class="sub">Record both sides of the call</div>
     </div>
+    <button class="primary-sm" id="btn-banner-record">Record</button>
+  </div>
 
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <h3>Library <span class="k" id="lib-count"></span></h3>
-        <div class="row">
-          <button class="ghost" id="btn-open-folder">Open folder</button>
-          <button class="ghost" id="btn-refresh">Refresh</button>
-        </div>
+  <div class="card">
+    <div class="modes" id="modes">
+      <div class="mode active" data-mode="screen">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 21h6M12 17v4"/></svg>
+        <span>Screen</span>
       </div>
-      <div id="library"></div>
-      <div id="player"></div>
+      <div class="mode" data-mode="">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/></svg>
+        <span>Audio</span>
+      </div>
+      <div class="mode" data-mode="camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M15 10l4.5-2.5v9L15 14"/><rect x="2.5" y="6" width="12.5" height="12" rx="2"/></svg>
+        <span>Camera</span>
+      </div>
     </div>
-  </main>
+    <div class="capture-hint" id="capture-hint"></div>
+
+    <button class="cta cta-idle" id="btn-record">Start Recording</button>
+
+    <div id="rec-surface">
+      <div class="rec-dot"></div>
+      <div class="timer" id="timer">00:00</div>
+      <div class="rec-controls">
+        <button class="round" id="btn-pause" title="Pause">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.4" height="14" rx="1"/><rect x="13.6" y="5" width="3.4" height="14" rx="1"/></svg>
+        </button>
+        <button class="round" id="btn-resume" title="Resume" style="display:none">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+        </button>
+        <button class="round stop" id="btn-stop" title="Stop &amp; save">
+          <svg viewBox="0 0 24 24" fill="#fff"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="status-line"></div>
+  </div>
+
+  <div class="card" style="flex:1; overflow:auto; min-height: 120px">
+    <div class="lib-head">
+      <h3>Recordings <span id="lib-count"></span></h3>
+      <button class="ghost" id="btn-open-folder">Show in Finder</button>
+    </div>
+    <div id="library"></div>
+    <div id="player"></div>
+  </div>
+
   <script src="bundle.js"></script>
 </body>
 </html>
