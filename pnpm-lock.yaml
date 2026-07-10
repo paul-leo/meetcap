@@ -52,6 +52,19 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/capture:
+    dependencies:
+      meetcap-core:
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.21)
+
   packages/core:
     devDependencies:
       typescript:
@@ -88,6 +101,9 @@ importers:
 
   packages/renderer:
     dependencies:
+      meetcap-capture:
+        specifier: workspace:*
+        version: link:../capture
       meetcap-core:
         specifier: workspace:*
         version: link:../core

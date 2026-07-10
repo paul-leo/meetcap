@@ -24,21 +24,29 @@ export {
   readRecording,
   deleteRecording,
   recordingExists,
+  isBridgeAvailable,
+  getCapabilities,
+  type RendererCapabilities,
   type Recorder,
   type RecorderState,
   type CreateRecorderOptions,
   type StartOptions,
   type RecordingChunk,
 } from './recorder'
-export { PermissionDeniedError, StartTimeoutError, type DeniedMedia } from './errors'
+// Shared engine surface (errors + pure utils) — re-exported from meetcap-capture
+// so existing meetcap-renderer imports keep working unchanged.
 export {
+  PermissionDeniedError,
+  StartTimeoutError,
+  BridgeUnavailableError,
+  type DeniedMedia,
   pickMimeType,
   pickVideoMimeType,
   buildFilename,
   computeDuration,
   deniedMedia,
   withTimeout,
-} from './util'
+} from 'meetcap-capture'
 
 // Detector client
 export {

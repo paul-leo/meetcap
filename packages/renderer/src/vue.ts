@@ -18,7 +18,7 @@ import {
   type StartOptions,
 } from './recorder'
 import { createDetectorClient, type DetectorClient } from './detector'
-import { PermissionDeniedError } from './errors'
+import { PermissionDeniedError } from 'meetcap-capture'
 
 export interface UseRecorderOptions extends CreateRecorderOptions {
   /** Called per timeslice — use for incremental/segmented upload. */

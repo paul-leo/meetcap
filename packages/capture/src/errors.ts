@@ -40,3 +40,19 @@ export class StartTimeoutError extends Error {
     this.name = 'StartTimeoutError'
   }
 }
+
+/**
+ * `start()` was called in an environment without the required runtime — e.g.
+ * a hybrid web/Electron codebase whose web build imports meetcap-renderer but
+ * has no `window.meetcap` preload bridge. A typed rejection (instead of a raw
+ * TypeError) lets shared code degrade gracefully; gate UI up front with
+ * `isBridgeAvailable()` / `getCapabilities()`.
+ */
+export class BridgeUnavailableError extends Error {
+  readonly code = 'bridge-unavailable' as const
+
+  constructor(detail = 'window.meetcap bridge is not available in this environment') {
+    super(`meetcap: ${detail}`)
+    this.name = 'BridgeUnavailableError'
+  }
+}

@@ -26,6 +26,12 @@
       "require": "./dist/cjs/vue.js",
       "default": "./dist/cjs/vue.js"
     },
+    "./stub": {
+      "types": "./dist/cjs/stub.d.ts",
+      "import": "./dist/esm/stub.js",
+      "require": "./dist/cjs/stub.js",
+      "default": "./dist/cjs/stub.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -60,7 +66,8 @@
     "meetcap"
   ],
   "dependencies": {
-    "meetcap-core": "workspace:*"
+    "meetcap-core": "workspace:*",
+    "meetcap-capture": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=17",
