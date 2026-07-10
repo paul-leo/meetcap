@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>meetcap Recorder</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { font: 13px/1.5 -apple-system, system-ui, sans-serif; background: #14171b; color: #e8eaec; margin: 0; padding: 14px; user-select: none; }
+    main { display: grid; gap: 12px; }
+    .card { background: #1b2026; border: 1px solid #262d35; border-radius: 12px; padding: 14px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button { background: #2b6cb0; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500; }
+    button.ghost { background: transparent; border: 1px solid #39424d; color: #cbd3db; }
+    button.danger { background: #b03030; }
+    button.big { width: 100%; padding: 12px; font-size: 15px; }
+    button:disabled { opacity: .4; cursor: default; }
+    select { background: #232a32; color: #e8eaec; border: 1px solid #39424d; border-radius: 7px; padding: 6px 8px; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #232a32; font-size: 11.5px; }
+    .pill.ok { background: #1c4532; } .pill.bad { background: #63171b; } .pill.warn { background: #5f370e; }
+    .k { color: #8a94a0; font-size: 11.5px; }
+    .timer { font: 600 26px/1 ui-monospace, monospace; letter-spacing: 1px; }
+    #banner { display: none; background: #14321f; border-color: #1f5a37; }
+    #banner.show { display: block; }
+    #library .item { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid #262d35; }
+    #library .item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+    audio, video { max-width: 100%; margin-top: 8px; border-radius: 8px; }
+    h3 { margin: 0 0 4px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card" id="banner">
+      <div class="row" style="justify-content:space-between">
+        <div><strong id="banner-app">Meeting</strong> <span class="k">detected — record it?</span></div>
+        <button id="btn-banner-record">● Record meeting</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <span class="k">source</span>
+          <select id="video-source">
+            <option value="">audio only</option>
+            <option value="screen" selected>screen + audio</option>
+            <option value="camera">camera + audio</option>
+          </select>
+        </div>
+        <div class="row" id="perm-row">
+          <span class="pill" id="perm-screen">screen: ?</span>
+          <span class="pill" id="perm-mic">mic: ?</span>
+        </div>
+      </div>
+      <div class="row" style="margin: 12px 0 8px; justify-content:center">
+        <span class="timer" id="timer">00:00</span>
+      </div>
+      <button class="big" id="btn-record">● Start recording</button>
+      <div class="row" style="margin-top:8px; justify-content:center">
+        <button class="ghost" id="btn-pause" style="display:none">⏸ Pause</button>
+        <button class="ghost" id="btn-resume" style="display:none">▶ Resume</button>
+      </div>
+      <div class="k" id="status-line" style="margin-top:8px; text-align:center"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h3>Library <span class="k" id="lib-count"></span></h3>
+        <div class="row">
+          <button class="ghost" id="btn-open-folder">Open folder</button>
+          <button class="ghost" id="btn-refresh">Refresh</button>
+        </div>
+      </div>
+      <div id="library"></div>
+      <div id="player"></div>
+    </div>
+  </main>
+  <script src="bundle.js"></script>
+</body>
+</html>
