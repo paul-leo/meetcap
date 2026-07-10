@@ -431,9 +431,19 @@ export function requestPermissions() {
   return window.meetcap.requestPermissions()
 }
 
-/** Open the macOS Screen Recording privacy pane (no-op on other platforms). */
+/** Open the macOS Screen Recording privacy pane (no-op on other platforms). Alias of openPrivacySettings('screen'). */
 export function openScreenRecordingSettings() {
   return window.meetcap.openScreenRecordingSettings()
+}
+
+/**
+ * Open the macOS System Settings privacy pane for the given media — pair it
+ * with `PermissionDeniedError.denied` to send the user straight to the right
+ * switch. Screen recording additionally needs an app restart after toggling.
+ * No-op off macOS.
+ */
+export function openPrivacySettings(pane: 'screen' | 'microphone' | 'camera') {
+  return window.meetcap.openPrivacySettings(pane)
 }
 
 /** Current permission status without prompting. */

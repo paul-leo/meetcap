@@ -240,6 +240,54 @@ try {
 Every rejection is also emitted as an `error` event, so fire-and-forget callers
 keep a signal — but add a `.catch()` to avoid unhandled-rejection noise.
 
+### Querying and guiding, in one loop
+
+- **Query** (no prompt): `getPermissionStatus()` → `{ platform, screen, microphone, camera }`
+  (`granted` / `denied` / `restricted` / `not-determined` / `n/a` off macOS).
+- **Guide**: when `start()` rejects, `PermissionDeniedError.denied` names exactly
+  what blocked it — deep-link the user to the matching pane:
+
+```ts
+import { openPrivacySettings } from 'meetcap-renderer'
+
+catch (err) {
+  if (err instanceof PermissionDeniedError) {
+    for (const pane of err.denied) await openPrivacySettings(pane) // 'screen' | 'microphone' | 'camera'
+  }
+}
+```
+
+Screen recording is special: after the user toggles it, **the app must be
+restarted** to pick it up — say so in your UI. `openScreenRecordingSettings()`
+remains as an alias of `openPrivacySettings('screen')`.
+
+### What your app must declare (macOS)
+
+meetcap can't declare these for you — they live in the **host app's** bundle,
+and missing ones fail in ways that look like meetcap bugs:
+
+| Declaration | Needed for | Missing ⇒ |
+|---|---|---|
+| `NSMicrophoneUsageDescription` (Info.plist) | every recording (mic capture) | packaged app **crashes** on the first `getUserMedia`; `askForMediaAccess('microphone')` never prompts |
+| `NSCameraUsageDescription` (Info.plist) | `video: 'camera'`, and required for `getDisplayMedia` to function | crash / silent failure |
+| `com.apple.security.device.audio-input` (entitlement) | signed / hardened-runtime builds | mic capture denied at runtime |
+| `com.apple.security.device.camera` (entitlement) | signed builds using `video: 'camera'` | camera denied at runtime |
+| Screen Recording | system audio + `video: 'screen'` | **no Info.plist key exists** — it's a per-user TCC toggle in System Settings; first capture registers the app in the list, user enables it, app restarts |
+
+electron-builder example (this is exactly what the demo ships —
+`examples/electron-demo/electron-builder.yml`):
+
+```yaml
+mac:
+  extendInfo:
+    NSMicrophoneUsageDescription: <why your app records the microphone>
+    NSCameraUsageDescription: <why your app uses the camera>
+  # for signed/notarized builds also provide an entitlements plist with
+  # com.apple.security.device.audio-input (+ .camera if you record camera)
+```
+
+Windows and Linux need no declarations — the permission fields report `n/a`.
+
 Detection itself needs no permissions by default: `startDetector()` runs
 process-only (`require: 'process'`) — no window enumeration, no
 screen-recording permission, no macOS picker dialog. Of the built-in `presets`
