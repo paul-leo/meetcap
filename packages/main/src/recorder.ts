@@ -14,7 +14,7 @@
  * leaves a partial-but-playable file. A sidecar manifest (`<key>.meetcap.json`)
  * tracks a logical recording across segments, enabling crash recovery / resume.
  */
-import { app, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron'
+import { app, desktopCapturer, ipcMain, session, shell, systemPreferences } from 'electron'
 import { initMain } from 'electron-audio-loopback'
 import {
   IPC,
@@ -35,6 +35,14 @@ export interface InitRecorderMainOptions {
   saveDir?: string
   /** Reveal the finished file in the OS file manager. Default `true`. */
   revealInFolder?: boolean
+  /**
+   * Session partition of the windows that record (e.g. `'persist:main'`).
+   * The loopback display-media handler is bound per session; without this,
+   * it lands on the default session only, and `getDisplayMedia` from a
+   * window on a custom partition fails with "Not supported". Omit when your
+   * windows use the default session.
+   */
+  partition?: string
 }
 
 interface OpenEntry {
@@ -49,6 +57,34 @@ interface OpenEntry {
 export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
   // Inject macOS loopback flags + register enable/disable-loopback-audio IPC.
   initMain()
+
+  // Take over the loopback display-media handler from electron-audio-loopback:
+  // (1) it binds to the default session only — windows on a custom partition
+  //     get "Not supported" from getDisplayMedia; and
+  // (2) its async handler throws when desktopCapturer.getSources() fails
+  //     (e.g. screen-recording permission missing) without ever invoking the
+  //     callback, which leaves the renderer's getDisplayMedia pending forever.
+  // Ours resolves the session per `options.partition` and always settles the
+  // request — deny via callback({}) so the renderer gets a rejection.
+  const resolveSession = () =>
+    options.partition ? session.fromPartition(options.partition) : session.defaultSession
+  const bindLoopbackHandler = () => {
+    resolveSession().setDisplayMediaRequestHandler(async (_req, callback) => {
+      try {
+        const sources = await desktopCapturer.getSources({ types: ['screen'] })
+        if (sources.length === 0) throw new Error('meetcap: no screen sources')
+        callback({ video: sources[0], audio: 'loopback' })
+      } catch {
+        callback({})
+      }
+    })
+  }
+  ipcMain.removeHandler(IPC.enableLoopback)
+  ipcMain.handle(IPC.enableLoopback, () => bindLoopbackHandler())
+  ipcMain.removeHandler(IPC.disableLoopback)
+  ipcMain.handle(IPC.disableLoopback, () => {
+    resolveSession().setDisplayMediaRequestHandler(null)
+  })
 
   const revealInFolder = options.revealInFolder ?? true
   const open = new Map<string, OpenEntry>()
@@ -160,6 +196,47 @@ export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
       }
     }
     return out
+  })
+
+  // File access for the renderer (upload / cleanup / crash-recovery checks).
+  // Hard security boundary: only paths inside the recordings directory.
+  const assertInSaveDir = (filePath: string): string => {
+    if (!filePath || typeof filePath !== 'string') throw new Error('meetcap: invalid path')
+    const normalized = path.resolve(filePath)
+    if (!normalized.startsWith(path.resolve(dir()) + path.sep)) {
+      throw new Error('meetcap: path outside the recordings directory')
+    }
+    return normalized
+  }
+
+  ipcMain.handle(IPC.recordingRead, (_evt, { filePath }: { filePath: string }): Buffer => {
+    return fs.readFileSync(assertInSaveDir(filePath))
+  })
+
+  ipcMain.handle(IPC.recordingExists, (_evt, { filePath }: { filePath: string }): boolean => {
+    try {
+      return fs.existsSync(assertInSaveDir(filePath))
+    } catch {
+      return false
+    }
+  })
+
+  ipcMain.handle(IPC.recordingDelete, (_evt, { filePath }: { filePath: string }): void => {
+    fs.rmSync(assertInSaveDir(filePath), { force: true })
+    // Sweep manifests whose segment files are now all gone, so deleted
+    // recordings don't accumulate *.meetcap.json or resurface as interrupted.
+    const saveDir = dir()
+    for (const f of fs.readdirSync(saveDir)) {
+      if (!f.endsWith('.meetcap.json')) continue
+      try {
+        const m = readManifest(path.join(saveDir, f))
+        if (m.segments.length > 0 && segPaths(saveDir, m).every((p) => !fs.existsSync(p))) {
+          fs.rmSync(path.join(saveDir, f), { force: true })
+        }
+      } catch {
+        // skip unreadable/corrupt manifests
+      }
+    }
   })
 
   ipcMain.handle(IPC.mediaAccess, (): PermissionStatus => {

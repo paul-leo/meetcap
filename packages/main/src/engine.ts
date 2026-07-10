@@ -125,6 +125,21 @@ export function resolveMeeting(
   return null
 }
 
+export interface DetectionStateOptions {
+  /** Injectable occurrence-id generator (deterministic tests). Default randomUUID. */
+  generateId?: () => string
+  /**
+   * Grace window (ms) before a disappeared meeting is declared ended. Poll
+   * results flicker — a minimized window loses its title, a meeting process
+   * blips — and each flicker would otherwise fire a false `meeting-ended`.
+   * Within the grace window the same rule id reappearing is the same
+   * continuous meeting: same `meetingId`, no events. `0` (default) ends
+   * immediately. The ended event fires on the first `update()` at/after the
+   * deadline, so worst-case latency is `endGraceMs` + one poll interval.
+   */
+  endGraceMs?: number
+}
+
 /**
  * Edge detector: turns a stream of per-tick results into detected/ended events,
  * minting a unique `meetingId` per meeting **occurrence** (stable across polls,
@@ -133,36 +148,52 @@ export function resolveMeeting(
  * while an app swap (Zoom → Teams within one interval) yields an ended+detected
  * pair. Known limit: leaving one Zoom call and joining another within a single
  * poll interval is indistinguishable and keeps the same id.
- *
- * `generateId` is injectable so tests stay deterministic.
  */
-export function createDetectionState(generateId: () => string = randomUUID) {
+export function createDetectionState(options: DetectionStateOptions = {}) {
+  const generateId = options.generateId ?? randomUUID
+  const endGraceMs = options.endGraceMs ?? 0
   let current: MeetingInfo | null = null
+  // Wall-clock start of the pending disappearance (null = meeting visible).
+  // Timestamps are injected via update(result, now) so this stays pure.
+  let pendingEndSince: number | null = null
   return {
     /** Feed one detection result; returns 0–2 edge events (swap = ended + detected). */
-    update(result: MeetingInfo | null): DetectorEvent[] {
+    update(result: MeetingInfo | null, now: number = Date.now()): DetectorEvent[] {
       if (result === null) {
         if (current === null) return []
+        if (endGraceMs > 0) {
+          if (pendingEndSince === null) {
+            pendingEndSince = now
+            return []
+          }
+          if (now - pendingEndSince < endGraceMs) return []
+        }
         const ended = current
         current = null
+        pendingEndSince = null
         return [{ type: 'meeting-ended', meeting: ended }]
       }
       if (current === null) {
         current = { ...result, meetingId: generateId() }
+        pendingEndSince = null
         return [{ type: 'meeting-detected', meeting: current }]
       }
       if (current.id === result.id) {
-        // Same occurrence — refresh metadata, keep its id, no edge.
+        // Same occurrence — refresh metadata, keep its id, cancel any pending
+        // end (a reappearance within grace is the same continuous meeting).
         current = { ...result, meetingId: current.meetingId }
+        pendingEndSince = null
         return []
       }
       const ended = current
       current = { ...result, meetingId: generateId() }
+      pendingEndSince = null
       return [
         { type: 'meeting-ended', meeting: ended },
         { type: 'meeting-detected', meeting: current },
       ]
     },
+    /** The tracked occurrence; stays non-null during a pending (grace) end. */
     get current(): MeetingInfo | null {
       return current
     },

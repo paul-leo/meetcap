@@ -15,6 +15,14 @@ import { presets } from './rules'
 export interface StartDetectorOptions extends DetectorConfig {
   /** Polling interval in ms. Default 3000. */
   intervalMs?: number
+  /**
+   * Debounce for `meeting-ended` (ms). A meeting that disappears and comes
+   * back (same rule id) within this window is treated as one continuous
+   * meeting — same `meetingId`, no ended/detected churn. Absorbs poll
+   * flicker (minimized window losing its title, meeting-process blips).
+   * Default 0 = report the end on the next poll, current behavior.
+   */
+  endGraceMs?: number
 }
 
 export interface Detector {
@@ -43,7 +51,7 @@ async function listProcesses(): Promise<ProcessInfo[]> {
 export function startDetector(opts: StartDetectorOptions = {}): Detector {
   const intervalMs = opts.intervalMs ?? 3000
   const rules = opts.rules ?? presets
-  const state = createDetectionState()
+  const state = createDetectionState({ endGraceMs: opts.endGraceMs })
 
   const policy = opts.require ?? 'process'
 

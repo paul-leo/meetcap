@@ -377,3 +377,26 @@ export function openScreenRecordingSettings() {
 export function getPermissionStatus() {
   return window.meetcap.mediaAccess()
 }
+
+/**
+ * Read a recording's bytes for upload — e.g.
+ * `new File([await readRecording(r.filePath)], name, { type: r.mimeType })`.
+ * Restricted to files inside the recordings directory.
+ */
+export function readRecording(filePath: string) {
+  return window.meetcap.readRecording(filePath)
+}
+
+/**
+ * Delete a recording file (e.g. after a successful upload). Manifests whose
+ * segments are all gone are cleaned up with it. Restricted to the recordings
+ * directory.
+ */
+export function deleteRecording(filePath: string) {
+  return window.meetcap.deleteRecording(filePath)
+}
+
+/** Whether a recording file still exists (check before offering a resume/re-upload). */
+export function recordingExists(filePath: string) {
+  return window.meetcap.recordingExists(filePath)
+}

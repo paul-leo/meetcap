@@ -49,7 +49,7 @@ recorder.resume()   // continues the same recording
 recorder.stop()     // finalizes the .webm
 ```
 
-See [`examples/electron-demo`](examples/electron-demo) for a complete, runnable app, and the **[recording lifecycle & integration guide](docs/recording-lifecycle.md)** for which events to wire, when recording starts/ends, segmented vs whole-file upload, and crash-resume.
+See [`examples/electron-demo`](examples/electron-demo) for a complete, runnable app, and the **[recording lifecycle & integration guide](docs/recording-lifecycle.md)** for which events to wire, when recording starts/ends, segmented vs whole-file upload, and crash-resume. Shipping in a real product? The **[integration playbook](docs/integration-playbook.md)** covers custom session partitions (`initRecorderMain({ partition })`), upload + cleanup (`readRecording`/`deleteRecording`/`recordingExists`), debounced meeting boundaries (`startDetector({ endGraceMs })`), and multi-window apps.
 
 ## Architecture: who runs where
 
