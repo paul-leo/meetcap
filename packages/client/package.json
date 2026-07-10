@@ -1,6 +1,6 @@
 {
   "name": "meetcap-client",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Runtime negotiation for hybrid web/Electron codebases — one install that records via meetcap-renderer when the Electron preload bridge is present (loopback system audio, disk persistence, meeting detection) and falls back to meetcap-web (browser capture + IndexedDB) everywhere else.",
   "license": "MIT",
   "type": "commonjs",

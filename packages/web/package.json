@@ -1,6 +1,6 @@
 {
   "name": "meetcap-web",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Browser-native recording for meetcap — capture the mic, camera, a shared tab/screen (getDisplayMedia) or caller-provided streams (e.g. WebRTC remote audio), mix, record to webm, and persist crash-safe to IndexedDB. No Electron required; pairs with meetcap-renderer via meetcap-client for hybrid apps.",
   "license": "MIT",
   "type": "commonjs",

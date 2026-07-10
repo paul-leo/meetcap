@@ -1,6 +1,6 @@
 {
   "name": "meetcap-capture",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Shared recording engine for meetcap — the backend-agnostic capture state machine (events, pause accounting, crash-safe chunk ordering) that meetcap-renderer (Electron) and meetcap-web (browser) plug their capture/persistence/permission backends into.",
   "license": "MIT",
   "type": "commonjs",
