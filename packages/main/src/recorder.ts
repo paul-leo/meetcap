@@ -68,7 +68,11 @@ export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
       fs.mkdirSync(saveDir, { recursive: true })
       const startedAt = Date.now()
 
-      // Resume an existing logical recording, or start a new one.
+      // Resume an existing logical recording, or start a new one. On resume the
+      // manifest's stored meeting (with its original meetingId) stays
+      // authoritative — args.meeting is ignored by design: a crash-resume after
+      // relaunch would carry a freshly-minted occurrence id, so a mismatch
+      // check here would break the primary resume flow.
       let manifest: RecordingManifest
       let recordingKey: string
       if (args.recordingKey && fs.existsSync(manifestPathFor(args.recordingKey))) {

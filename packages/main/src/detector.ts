@@ -57,7 +57,9 @@ export function startDetector(opts: StartDetectorOptions = {}): Detector {
     return resolveMeeting(sources, procs, opts)
   }
 
-  ipcMain.handle(IPC.detectOnce, () => detectOnce())
+  // Prefer the tracked occurrence (it carries the minted meetingId) over a
+  // raw re-detection, so one-shot callers see the same identity as the events.
+  ipcMain.handle(IPC.detectOnce, async () => state.current ?? (await detectOnce()))
   ipcMain.handle(IPC.listWindows, async () => {
     const sources = await desktopCapturer.getSources({
       types: ['window', 'screen'],
@@ -68,8 +70,8 @@ export function startDetector(opts: StartDetectorOptions = {}): Detector {
 
   const tick = async () => {
     try {
-      const evt = state.update(await detectOnce())
-      if (evt) {
+      // 0–2 events; a meeting swap yields ended(old) then detected(new).
+      for (const evt of state.update(await detectOnce())) {
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send(IPC.detectorEvent, evt)
         }

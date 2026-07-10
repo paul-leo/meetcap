@@ -4,15 +4,16 @@
  *
  *   import { createDetectorClient } from 'meetcap-renderer'
  *   const detector = createDetectorClient()
- *   detector.on('meeting-detected', (m) => console.log('in', m.app))
- *   detector.on('meeting-ended', () => console.log('out'))
+ *   detector.on('meeting-detected', (m) => console.log('in', m.app, m.meetingId))
+ *   detector.on('meeting-ended', (m) => console.log('out', m.meetingId))
  *
  * Requires `window.meetcap` (see meetcap-core/preload).
  */
 import type { MeetingInfo } from 'meetcap-core'
 
 type DetectedHandler = (meeting: MeetingInfo) => void
-type EndedHandler = () => void
+/** Receives the meeting that ended (same `meetingId` as its detected event). */
+type EndedHandler = (meeting: MeetingInfo) => void
 
 export interface DetectorClient {
   on(event: 'meeting-detected', fn: DetectedHandler): DetectorClient
@@ -30,10 +31,13 @@ export function createDetectorClient(): DetectorClient {
   const unsubscribe = window.meetcap.onDetectorEvent((evt) => {
     if (evt.type === 'meeting-detected') {
       current = evt.meeting
-      if (evt.meeting) detected.forEach((fn) => fn(evt.meeting as MeetingInfo))
+      if (evt.meeting) detected.forEach((fn) => fn(evt.meeting))
     } else {
+      // An older main may still send meeting: null on ended — fall back to the
+      // meeting we were tracking so handlers always receive one.
+      const endedMeeting = evt.meeting ?? current
       current = null
-      ended.forEach((fn) => fn())
+      if (endedMeeting) ended.forEach((fn) => fn(endedMeeting))
     }
   })
 
