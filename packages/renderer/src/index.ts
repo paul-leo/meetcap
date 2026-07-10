@@ -33,7 +33,11 @@ export { PermissionDeniedError, StartTimeoutError, type DeniedMedia } from './er
 export { pickMimeType, buildFilename, computeDuration, deniedMedia, withTimeout } from './util'
 
 // Detector client
-export { createDetectorClient, type DetectorClient } from './detector'
+export {
+  createDetectorClient,
+  type DetectorClient,
+  type CreateDetectorClientOptions,
+} from './detector'
 
 export type {
   RecordingResult,
