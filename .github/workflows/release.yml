@@ -56,8 +56,11 @@ jobs:
                   registry-url: 'https://registry.npmjs.org'
 
             - name: Upgrade npm CLI for OIDC trusted publishing
+              # Pinned to npm 11: OIDC trusted publishing needs >=11.5.1, and
+              # npm 12 dropped the bundled `sigstore` module, which crashes
+              # `npm publish --provenance` with MODULE_NOT_FOUND.
               run: |
-                  npm install -g npm@latest
+                  npm install -g npm@11
                   npm --version
 
             - name: Install dependencies
