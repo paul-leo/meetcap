@@ -1,4 +1,5 @@
 import type { MeetingInfo, MeetingRule, ProcessInfo, WindowSource, DetectorEvent } from 'meetcap-core'
+import { randomUUID } from 'node:crypto'
 import { presets, toMatcher } from './rules'
 
 export interface DetectorConfig {
@@ -125,26 +126,42 @@ export function resolveMeeting(
 }
 
 /**
- * Edge detector: turns a stream of per-tick results into detected/ended events.
- * Mirrors the lab's `lastHadMeeting` logic but as a pure, testable unit.
+ * Edge detector: turns a stream of per-tick results into detected/ended events,
+ * minting a unique `meetingId` per meeting **occurrence** (stable across polls,
+ * new on every entry). Two consecutive polls are the same occurrence when their
+ * rule `id` matches — so metadata churn (window title changes) keeps the id,
+ * while an app swap (Zoom → Teams within one interval) yields an ended+detected
+ * pair. Known limit: leaving one Zoom call and joining another within a single
+ * poll interval is indistinguishable and keeps the same id.
+ *
+ * `generateId` is injectable so tests stay deterministic.
  */
-export function createDetectionState() {
+export function createDetectionState(generateId: () => string = randomUUID) {
   let current: MeetingInfo | null = null
   return {
-    /** Feed one detection result; returns an edge event, or null if unchanged. */
-    update(result: MeetingInfo | null): DetectorEvent | null {
-      const had = current !== null
-      const has = result !== null
-      if (has && !had) {
-        current = result
-        return { type: 'meeting-detected', meeting: result }
-      }
-      if (!has && had) {
+    /** Feed one detection result; returns 0–2 edge events (swap = ended + detected). */
+    update(result: MeetingInfo | null): DetectorEvent[] {
+      if (result === null) {
+        if (current === null) return []
+        const ended = current
         current = null
-        return { type: 'meeting-ended', meeting: null }
+        return [{ type: 'meeting-ended', meeting: ended }]
       }
-      current = result
-      return null
+      if (current === null) {
+        current = { ...result, meetingId: generateId() }
+        return [{ type: 'meeting-detected', meeting: current }]
+      }
+      if (current.id === result.id) {
+        // Same occurrence — refresh metadata, keep its id, no edge.
+        current = { ...result, meetingId: current.meetingId }
+        return []
+      }
+      const ended = current
+      current = { ...result, meetingId: generateId() }
+      return [
+        { type: 'meeting-ended', meeting: ended },
+        { type: 'meeting-detected', meeting: current },
+      ]
     },
     get current(): MeetingInfo | null {
       return current

@@ -9,6 +9,16 @@
 export interface MeetingInfo {
   /** Rule id that matched, e.g. "zoom". */
   id: string
+  /**
+   * Unique id for this meeting **occurrence**, minted by the detector when the
+   * meeting is first seen and stable across polls until it ends — two Zoom
+   * calls get two different `meetingId`s even though both have `id: "zoom"`.
+   * Carried on `meeting-detected` AND `meeting-ended`, so consumers can tell
+   * which meeting ended and correlate recordings with meetings. Absent on raw
+   * one-shot `detectOnce()` results (when no occurrence is being tracked) and
+   * on hand-built MeetingInfo objects.
+   */
+  meetingId?: string
   /** Display name, e.g. "Zoom". */
   app: string
   /** The window title that matched (when matched by window). */
@@ -61,10 +71,14 @@ export interface ProcessInfo {
 /** Result of a single detection pass. `null` means no meeting. */
 export type DetectionResult = MeetingInfo | null
 
-/** Edge event broadcast from main → renderer by the detector. */
+/**
+ * Edge event broadcast from main → renderer by the detector. `meeting-ended`
+ * carries the meeting that ended (same `meetingId` as its `meeting-detected`),
+ * so multi-meeting consumers can tell which one is over.
+ */
 export interface DetectorEvent {
   type: 'meeting-detected' | 'meeting-ended'
-  meeting: MeetingInfo | null
+  meeting: MeetingInfo
 }
 
 /** A finished recording (one stop() call = one segment of a logical recording). */
@@ -152,7 +166,11 @@ export interface PermissionStatus {
  * Renderer-side packages (`/renderer`, `/react`, `/vue`) depend on this shape.
  */
 export interface MeetcapBridge {
-  /** One-shot detection (rarely needed; the poller pushes events instead). */
+  /**
+   * One-shot detection (rarely needed; the poller pushes events instead).
+   * When the poller is already tracking a meeting, returns that occurrence
+   * (with its `meetingId`); otherwise a raw, id-less result.
+   */
   detectOnce(): Promise<DetectionResult>
   /** Subscribe to detector edge events. Returns an unsubscribe function. */
   onDetectorEvent(cb: (evt: DetectorEvent) => void): () => void

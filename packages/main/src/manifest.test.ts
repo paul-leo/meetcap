@@ -48,4 +48,13 @@ describe('manifest lifecycle', () => {
     const m = base()
     expect(() => closeSegment(m, 5, 100)).not.toThrow()
   })
+
+  it('preserves meeting.meetingId through the whole lifecycle', () => {
+    const meeting = { id: 'zoom', app: 'Zoom', meetingId: 'occ-42' }
+    const m = createManifest({ key: 'k2', meeting, mimeType: 'audio/webm', createdAt: 1000 })
+    addSegment(m, 'seg-a.webm', 1000)
+    closeSegment(m, 0, 500)
+    finalizeManifest(m)
+    expect(m.meeting?.meetingId).toBe('occ-42')
+  })
 })

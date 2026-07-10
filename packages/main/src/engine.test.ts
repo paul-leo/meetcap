@@ -122,15 +122,59 @@ describe('resolveMeeting', () => {
 })
 
 describe('createDetectionState', () => {
-  it('emits detected on entry and ended on exit, nothing in between', () => {
-    const s = createDetectionState()
-    const zoom = { id: 'zoom', app: 'Zoom', windowName: 'Zoom会议' }
-    expect(s.update(null)).toBeNull()
-    expect(s.update(zoom)).toEqual({ type: 'meeting-detected', meeting: zoom })
-    expect(s.update(zoom)).toBeNull() // still in meeting → no repeat
-    expect(s.current).toBe(zoom)
-    expect(s.update(null)).toEqual({ type: 'meeting-ended', meeting: null })
-    expect(s.update(null)).toBeNull()
+  // Deterministic occurrence ids: occ-0, occ-1, …
+  const stateWithIds = () => {
+    let n = 0
+    return createDetectionState(() => `occ-${n++}`)
+  }
+  const zoom = { id: 'zoom', app: 'Zoom', windowName: 'Zoom会议' }
+  const teams = { id: 'teams', app: 'Microsoft Teams', windowName: 'Standup | Teams' }
+
+  it('emits detected (with a minted meetingId) on entry and ended on exit', () => {
+    const s = stateWithIds()
+    expect(s.update(null)).toEqual([])
+    expect(s.update(zoom)).toEqual([
+      { type: 'meeting-detected', meeting: { ...zoom, meetingId: 'occ-0' } },
+    ])
+    expect(s.update(zoom)).toEqual([]) // still in meeting → no repeat
+    expect(s.current).toEqual({ ...zoom, meetingId: 'occ-0' })
+    expect(s.update(null)).toEqual([
+      { type: 'meeting-ended', meeting: { ...zoom, meetingId: 'occ-0' } },
+    ])
+    expect(s.update(null)).toEqual([])
     expect(s.current).toBeNull()
+  })
+
+  it('keeps the meetingId across polls while metadata churns', () => {
+    const s = stateWithIds()
+    s.update(zoom)
+    expect(s.update({ ...zoom, windowName: 'Zoom Meeting — renamed' })).toEqual([])
+    expect(s.current?.meetingId).toBe('occ-0')
+    expect(s.current?.windowName).toBe('Zoom Meeting — renamed')
+  })
+
+  it('mints a fresh meetingId on re-entry', () => {
+    const s = stateWithIds()
+    s.update(zoom)
+    s.update(null)
+    const evts = s.update(zoom)
+    expect(evts).toHaveLength(1)
+    expect(evts[0].meeting.meetingId).toBe('occ-1')
+  })
+
+  it('a meeting swap emits ended(old) then detected(new) in one update', () => {
+    const s = stateWithIds()
+    s.update(zoom)
+    expect(s.update(teams)).toEqual([
+      { type: 'meeting-ended', meeting: { ...zoom, meetingId: 'occ-0' } },
+      { type: 'meeting-detected', meeting: { ...teams, meetingId: 'occ-1' } },
+    ])
+    expect(s.current?.meetingId).toBe('occ-1')
+  })
+
+  it('default generator mints a UUID-shaped id', () => {
+    const s = createDetectionState()
+    const [evt] = s.update(zoom)
+    expect(evt.meeting.meetingId).toMatch(/^[0-9a-f-]{36}$/)
   })
 })

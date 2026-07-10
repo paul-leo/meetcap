@@ -117,9 +117,35 @@ Set `createRecorder({ persistToDisk: false })` for **upload-only** (no local fil
 | Event | Payload | Fires when |
 |---|---|---|
 | `meeting-detected` | `MeetingInfo` | A meeting starts (window/process matched a rule) |
-| `meeting-ended` | — | The matched meeting disappears |
+| `meeting-ended` | `MeetingInfo` | The matched meeting disappears — same `meetingId` as its `meeting-detected` |
 
 Also: `detector.current`, `detector.isInMeeting`.
+
+### Correlating recordings with meetings — `meetingId`
+
+Every `MeetingInfo` from the detector carries a **`meetingId`**: a unique id for
+that meeting *occurrence*, minted when the meeting is first seen and stable
+across polls until it ends. Two Zoom calls get two different `meetingId`s even
+though both have `id: "zoom"`. Because `meeting-ended` carries the same id, you
+can tell *which* meeting ended; and because the meeting you pass to
+`recorder.start(meeting)` is echoed in `complete`'s `result.meeting` (and
+persisted in the manifest), `result.meeting.meetingId` links a recording to its
+meeting occurrence:
+
+```ts
+let recordingMeeting: MeetingInfo | null = null
+detector.on('meeting-detected', (m) => { recordingMeeting = m; recorder.start(m) })
+detector.on('meeting-ended', (m) => {
+  // only stop if the recording belongs to the meeting that just ended
+  if (recordingMeeting?.meetingId === m.meetingId) { recordingMeeting = null; recorder.stop() }
+})
+recorder.on('complete', (r) => index.set(r.meeting?.meetingId, r.filePath))
+```
+
+Back-to-back meeting swaps (Zoom ends, Teams starts within one poll interval)
+now emit `meeting-ended` (old id) followed by `meeting-detected` (new id) in the
+same tick. Known limit: leaving one Zoom call and joining another Zoom call
+within a single poll interval is indistinguishable and keeps the same id.
 
 **Recorder** (`createRecorder(options)`):
 

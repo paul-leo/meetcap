@@ -182,11 +182,15 @@ recorder.on('complete', (result) => {
 detector.on('meeting-detected', (m) => {
   // Detected by window (rich title) or by meeting-process (minimized/hidden window).
   const via = m.windowName ? `window "${m.windowName}"` : `process "${m.process ?? 'n/a'}"`
-  log(`meeting-detected: ${m.app} (via ${via})`)
+  log(`meeting-detected: ${m.app} [${m.meetingId?.slice(0, 8) ?? 'no-id'}] (via ${via})`)
   showBanner(m)
 })
-detector.on('meeting-ended', () => {
-  log('meeting-ended')
+detector.on('meeting-ended', (m) => {
+  log(`meeting-ended: ${m.app} [${m.meetingId?.slice(0, 8) ?? 'no-id'}]`)
+  // Only tear down state belonging to the meeting that ended — on a meeting
+  // swap, ended(old) is followed by detected(new) in the same tick, and this
+  // guard keeps the new meeting's banner/recording untouched.
+  if (currentMeeting && currentMeeting.meetingId !== m.meetingId) return
   currentMeeting = null
   if (recorder.state === 'recording') recorder.stop()
   hideBanner()
