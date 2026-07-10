@@ -38,6 +38,7 @@ export interface UseRecorderOptions extends CreateRecorderOptions {
 export interface PermissionIssue {
   screen: boolean
   microphone: boolean
+  camera: boolean
 }
 
 export interface UseRecorder {
@@ -140,7 +141,11 @@ export function useRecorder(options?: UseRecorderOptions): UseRecorder {
 
   const permissionIssue: PermissionIssue | null =
     error instanceof PermissionDeniedError
-      ? { screen: error.denied.includes('screen'), microphone: error.denied.includes('microphone') }
+      ? {
+          screen: error.denied.includes('screen'),
+          microphone: error.denied.includes('microphone'),
+          camera: error.denied.includes('camera'),
+        }
       : null
 
   return {

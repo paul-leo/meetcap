@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
-import { pickMimeType, buildFilename, computeDuration, deniedMedia, withTimeout } from './util'
+import {
+  pickMimeType,
+  pickVideoMimeType,
+  buildFilename,
+  computeDuration,
+  deniedMedia,
+  withTimeout,
+} from './util'
 import { PermissionDeniedError, StartTimeoutError } from './errors'
 
 describe('computeDuration', () => {
@@ -28,6 +35,18 @@ describe('pickMimeType', () => {
   })
   it('falls back to audio/webm when opus is not supported', () => {
     expect(pickMimeType(() => false)).toBe('audio/webm')
+  })
+})
+
+describe('pickVideoMimeType', () => {
+  it('prefers vp9+opus when supported', () => {
+    expect(pickVideoMimeType(() => true)).toBe('video/webm;codecs=vp9,opus')
+  })
+  it('falls back to vp8+opus', () => {
+    expect(pickVideoMimeType((t) => t.includes('vp8'))).toBe('video/webm;codecs=vp8,opus')
+  })
+  it('falls back to bare video/webm', () => {
+    expect(pickVideoMimeType(() => false)).toBe('video/webm')
   })
 })
 
@@ -67,6 +86,14 @@ describe('deniedMedia', () => {
   })
   it('treats n/a (non-darwin) as non-blocking', () => {
     expect(deniedMedia({ platform: 'win32', screen: 'n/a', microphone: 'n/a' })).toEqual([])
+  })
+  it('ignores a denied camera unless the recording needs it', () => {
+    const s = { platform: 'darwin', screen: 'granted', microphone: 'granted', camera: 'denied' }
+    expect(deniedMedia(s)).toEqual([])
+    expect(deniedMedia(s, true)).toEqual(['camera'])
+  })
+  it('tolerates snapshots without a camera field (older mains)', () => {
+    expect(deniedMedia({ platform: 'darwin', screen: 'granted', microphone: 'granted' }, true)).toEqual([])
   })
 })
 

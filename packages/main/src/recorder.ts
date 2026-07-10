@@ -241,19 +241,20 @@ export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
 
   ipcMain.handle(IPC.mediaAccess, (): PermissionStatus => {
     if (process.platform !== 'darwin') {
-      return { platform: process.platform, screen: 'n/a', microphone: 'n/a' }
+      return { platform: process.platform, screen: 'n/a', microphone: 'n/a', camera: 'n/a' }
     }
     return {
       platform: 'darwin',
       screen: systemPreferences.getMediaAccessStatus('screen'),
       microphone: systemPreferences.getMediaAccessStatus('microphone'),
+      camera: systemPreferences.getMediaAccessStatus('camera'),
     }
   })
 
   // Pre-flight permissions so the first recording isn't blocked by a prompt.
   ipcMain.handle(IPC.requestPermissions, async (): Promise<PermissionStatus> => {
     if (process.platform !== 'darwin') {
-      return { platform: process.platform, screen: 'n/a', microphone: 'n/a' }
+      return { platform: process.platform, screen: 'n/a', microphone: 'n/a', camera: 'n/a' }
     }
     // Mic: native prompt (returns once the user answers).
     try {
@@ -273,7 +274,16 @@ export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
       }
       screen = systemPreferences.getMediaAccessStatus('screen')
     }
-    return { platform: 'darwin', screen, microphone: systemPreferences.getMediaAccessStatus('microphone') }
+    // Camera is NOT prompted here — most integrations never record camera
+    // video, and an unexplained camera prompt erodes trust. The prompt comes
+    // naturally from getUserMedia on the first `video: 'camera'` start; the
+    // snapshot still reports its current status.
+    return {
+      platform: 'darwin',
+      screen,
+      microphone: systemPreferences.getMediaAccessStatus('microphone'),
+      camera: systemPreferences.getMediaAccessStatus('camera'),
+    }
   })
 
   ipcMain.handle(IPC.openScreenSettings, () => {

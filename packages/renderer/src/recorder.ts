@@ -15,7 +15,14 @@
  */
 import type { MeetingInfo, PermissionStatus, RecordingResult } from 'meetcap-core'
 import { PermissionDeniedError, StartTimeoutError } from './errors'
-import { buildFilename, computeDuration, deniedMedia, pickMimeType, withTimeout } from './util'
+import {
+  buildFilename,
+  computeDuration,
+  deniedMedia,
+  pickMimeType,
+  pickVideoMimeType,
+  withTimeout,
+} from './util'
 
 export type RecorderState = 'idle' | 'recording' | 'paused'
 
@@ -47,6 +54,15 @@ export interface CreateRecorderOptions {
 export interface StartOptions {
   /** Resume an interrupted logical recording — its key from listInterruptedRecordings(). */
   resumeKey?: string
+  /**
+   * Add a video track to the recording (output becomes `video/webm`):
+   * - `'screen'` — the user's screen (the same capture that already provides
+   *   system audio; no extra permission beyond Screen Recording).
+   * - `'camera'` — the user's camera (`getUserMedia`; prompts/needs Camera
+   *   permission on first use).
+   * Omit for audio-only (the default, previous behavior).
+   */
+  video?: 'screen' | 'camera'
 }
 
 type StateHandler = (state: RecorderState) => void
@@ -89,20 +105,42 @@ export interface Recorder {
 interface MixedStream {
   mixed: MediaStream
   hasSystemAudio: boolean
+  /** The video source actually captured (null = audio-only). */
+  videoSource: 'screen' | 'camera' | null
   cleanup: () => void
 }
 
-async function buildMixedStream(): Promise<MixedStream> {
+async function buildMixedStream(video?: 'screen' | 'camera'): Promise<MixedStream> {
   const mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+
+  // Camera before the display capture, so its native prompt isn't buried
+  // behind the loopback flow; release the mic if it fails.
+  let camera: MediaStream | null = null
+  if (video === 'camera') {
+    try {
+      camera = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    } catch (err) {
+      mic.getTracks().forEach((t) => t.stop())
+      throw err
+    }
+  }
 
   await window.meetcap.enableLoopbackAudio()
   let system: MediaStream
   try {
     system = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+  } catch (err) {
+    mic.getTracks().forEach((t) => t.stop())
+    camera?.getTracks().forEach((t) => t.stop())
+    throw err
   } finally {
     await window.meetcap.disableLoopbackAudio()
   }
-  system.getVideoTracks().forEach((t) => t.stop())
+  // The display capture always carries a screen video track (it's how the
+  // loopback audio is granted). Keep it when recording the screen; otherwise
+  // stop it immediately so no video is captured that wasn't asked for.
+  const screenTrack = video === 'screen' ? (system.getVideoTracks()[0] ?? null) : null
+  if (!screenTrack) system.getVideoTracks().forEach((t) => t.stop())
   const hasSystemAudio = system.getAudioTracks().length > 0
 
   const ctx = new AudioContext()
@@ -110,12 +148,19 @@ async function buildMixedStream(): Promise<MixedStream> {
   ctx.createMediaStreamSource(mic).connect(dest)
   if (hasSystemAudio) ctx.createMediaStreamSource(system).connect(dest)
 
+  const videoTrack = screenTrack ?? camera?.getVideoTracks()[0] ?? null
+  const mixed = videoTrack
+    ? new MediaStream([...dest.stream.getAudioTracks(), videoTrack])
+    : dest.stream
+
   return {
-    mixed: dest.stream,
+    mixed,
     hasSystemAudio,
+    videoSource: videoTrack ? (video ?? null) : null,
     cleanup: () => {
       mic.getTracks().forEach((t) => t.stop())
       system.getTracks().forEach((t) => t.stop())
+      camera?.getTracks().forEach((t) => t.stop())
       void ctx.close()
     },
   }
@@ -142,6 +187,7 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
   let pausedAt: number | null = null // start of an in-progress pause (null = recording)
   let meeting: MeetingInfo | null = null
   let hasSystemAudio = false
+  let videoSource: 'screen' | 'camera' | null = null
   // Serializes disk writes so chunks land in capture order (webm header first).
   let writeChain: Promise<void> = Promise.resolve()
   // Bumped by every start() and by stop()/destroy() while no recorder exists,
@@ -200,6 +246,7 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
       if (state !== 'idle') return
       const epoch = ++startEpoch
       meeting = m
+      const video = opts.video
       try {
         // Pre-flight: a known-denied permission fails fast instead of letting
         // getDisplayMedia hang (on macOS the loopback display-media handler
@@ -211,13 +258,13 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
           // best-effort gate — the timeout below still covers the hang
         }
         if (perms) {
-          const denied = deniedMedia(perms)
+          const denied = deniedMedia(perms, video === 'camera')
           if (denied.length > 0) throw new PermissionDeniedError(denied, perms)
         }
         if (epoch !== startEpoch) return
 
         const built = await withTimeout(
-          buildMixedStream(),
+          buildMixedStream(video),
           startTimeoutMs,
           () => new StartTimeoutError(startTimeoutMs, perms),
           (late) => late.cleanup(),
@@ -230,12 +277,13 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
         }
         cleanup = built.cleanup
         hasSystemAudio = built.hasSystemAudio
+        videoSource = built.videoSource
         startedAt = Date.now()
         pausedAccumMs = 0
         pausedAt = null
         chunkIndex = 0
         writeChain = Promise.resolve()
-        const mimeType = pickMimeType()
+        const mimeType = videoSource ? pickVideoMimeType() : pickMimeType()
 
         if (persistToDisk) {
           const filename = buildFilename(meeting, new Date(), prefix)
@@ -279,6 +327,7 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
           cleanup?.()
           cleanup = null
           hasSystemAudio = false
+          videoSource = null
           // Close a half-open segment so it doesn't linger as a phantom
           // "interrupted" recording.
           const id = openId
@@ -326,6 +375,7 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
               durationMs,
               mimeType: mr.mimeType,
               hasSystemAudio,
+              videoSource,
               meeting,
             }
             cleanup?.()

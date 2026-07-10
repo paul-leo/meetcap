@@ -158,15 +158,17 @@ recorder.on('chunk', ({ index, blob }) => {
 recorder.on('complete', (result) => {
   chunkBytes = 0
   log(
-    `complete: ${(result.durationMs / 1000).toFixed(1)}s · systemAudio=${result.hasSystemAudio} · ${result.segments.length} segment(s)`,
+    `complete: ${(result.durationMs / 1000).toFixed(1)}s · systemAudio=${result.hasSystemAudio} · video=${result.videoSource ?? 'none'} · ${result.segments.length} segment(s)`,
   )
   log(`saved → ${result.filePath}`)
   $('result').innerHTML = ''
   if (result.filePath) {
-    const audio = document.createElement('audio')
-    audio.controls = true
-    audio.src = `file://${result.filePath}` // preview from disk (no in-memory blob)
-    $('result').appendChild(audio)
+    // Preview from disk (no in-memory blob); <video> when a video track was recorded.
+    const media = document.createElement(result.videoSource ? 'video' : 'audio')
+    media.controls = true
+    if (result.videoSource) media.style.maxWidth = '100%'
+    media.src = `file://${result.filePath}`
+    $('result').appendChild(media)
   }
   const note = document.createElement('div')
   note.className = 'k'
@@ -199,12 +201,17 @@ detector.on('meeting-ended', (m) => {
 // ── buttons ───────────────────────────────────────────────────────────────────
 // Start a recording, consuming a pending resumeKey (set by the Resume banner).
 function startRecording() {
-  const opts = resumeKey ? { resumeKey } : undefined
+  const video = ($('video-source') as HTMLSelectElement).value as '' | 'screen' | 'camera'
+  const opts = {
+    ...(resumeKey ? { resumeKey } : {}),
+    ...(video ? { video } : {}),
+  }
   if (resumeKey) log(`resuming recording ${resumeKey.slice(0, 8)} (new segment)`)
+  if (video) log(`recording with ${video} video`)
   recorder.start(currentMeeting, opts).catch((err) => {
     if (err instanceof PermissionDeniedError) {
       const p = err.permissions
-      log(`start rejected: ${err.message} (screen=${p.screen} mic=${p.microphone})`)
+      log(`start rejected: ${err.message} (screen=${p.screen} mic=${p.microphone} camera=${p.camera ?? 'n/a'})`)
       if (err.denied.includes('screen')) {
         log('opening System Settings — toggle meetcap under Screen Recording, then restart')
         void openScreenRecordingSettings()

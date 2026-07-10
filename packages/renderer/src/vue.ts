@@ -38,6 +38,7 @@ export interface UseRecorderOptions extends CreateRecorderOptions {
 export interface PermissionIssue {
   screen: boolean
   microphone: boolean
+  camera: boolean
 }
 
 // One app-global recorder for `shared: true` mounts, created with the options
@@ -135,6 +136,7 @@ export function useRecorder(options?: UseRecorderOptions): {
       ? {
           screen: error.value.denied.includes('screen'),
           microphone: error.value.denied.includes('microphone'),
+          camera: error.value.denied.includes('camera'),
         }
       : null,
   )

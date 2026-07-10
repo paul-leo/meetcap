@@ -14,6 +14,21 @@ export function pickMimeType(isSupported?: (type: string) => boolean): string {
 }
 
 /**
+ * Best supported mime type for recordings WITH a video track (screen/camera).
+ * Prefers VP9 (better quality/bitrate), falls back to VP8, then bare webm.
+ */
+export function pickVideoMimeType(isSupported?: (type: string) => boolean): string {
+  const check =
+    isSupported ??
+    ((type: string) =>
+      typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type))
+  for (const t of ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus']) {
+    if (check(t)) return t
+  }
+  return 'video/webm'
+}
+
+/**
  * Real recording duration, excluding any paused time. `pausedAccumMs` is the
  * total of already-finished pauses; `pausedAt` is the start of an in-progress
  * pause (null if currently recording). Passed in (no hidden clock) so it stays
@@ -32,13 +47,16 @@ export function computeDuration(
 /**
  * Which media permissions are hard-blocked (`denied`/`restricted`) in a
  * snapshot. `granted`, `not-determined` (prompt still possible) and `n/a`
- * (non-darwin) are not blocking.
+ * (non-darwin) are not blocking. Camera is only checked when the recording
+ * actually needs it (`needCamera`) — and only if the snapshot reports it
+ * (older mains don't).
  */
-export function deniedMedia(status: PermissionStatus): DeniedMedia[] {
-  const blocked = (s: string) => s === 'denied' || s === 'restricted'
+export function deniedMedia(status: PermissionStatus, needCamera = false): DeniedMedia[] {
+  const blocked = (s: string | undefined) => s === 'denied' || s === 'restricted'
   const out: DeniedMedia[] = []
   if (blocked(status.screen)) out.push('screen')
   if (blocked(status.microphone)) out.push('microphone')
+  if (needCamera && blocked(status.camera)) out.push('camera')
   return out
 }
 
