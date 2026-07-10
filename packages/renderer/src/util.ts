@@ -1,4 +1,5 @@
-import type { MeetingInfo } from 'meetcap-core'
+import type { MeetingInfo, PermissionStatus } from 'meetcap-core'
+import type { DeniedMedia } from './errors'
 
 /**
  * Pick the best supported recording mime type. `isSupported` is injectable so
@@ -26,6 +27,58 @@ export function computeDuration(
 ): number {
   const openPause = pausedAt === null ? 0 : Math.max(0, now - pausedAt)
   return Math.max(0, now - startedAt - pausedAccumMs - openPause)
+}
+
+/**
+ * Which media permissions are hard-blocked (`denied`/`restricted`) in a
+ * snapshot. `granted`, `not-determined` (prompt still possible) and `n/a`
+ * (non-darwin) are not blocking.
+ */
+export function deniedMedia(status: PermissionStatus): DeniedMedia[] {
+  const blocked = (s: string) => s === 'denied' || s === 'restricted'
+  const out: DeniedMedia[] = []
+  if (blocked(status.screen)) out.push('screen')
+  if (blocked(status.microphone)) out.push('microphone')
+  return out
+}
+
+/**
+ * Reject with `makeError()` if `p` doesn't settle within `ms` (`ms <= 0`
+ * disables). If `p` resolves after the timeout already fired, `onLate`
+ * receives the value so its resources can be released (e.g. stop tracks).
+ */
+export function withTimeout<T>(
+  p: Promise<T>,
+  ms: number,
+  makeError: () => Error,
+  onLate?: (value: T) => void,
+): Promise<T> {
+  if (ms <= 0) return p
+  return new Promise<T>((resolve, reject) => {
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      // The raced promise may still settle later — dispose a late value and
+      // swallow a late rejection so it doesn't surface as unhandled.
+      p.then(
+        (v) => onLate?.(v),
+        () => {},
+      )
+      reject(makeError())
+    }, ms)
+    p.then(
+      (v) => {
+        if (timedOut) return
+        clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        if (timedOut) return
+        clearTimeout(timer)
+        reject(e)
+      },
+    )
+  })
 }
 
 /**

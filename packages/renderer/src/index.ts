@@ -26,7 +26,8 @@ export {
   type StartOptions,
   type RecordingChunk,
 } from './recorder'
-export { pickMimeType, buildFilename, computeDuration } from './util'
+export { PermissionDeniedError, StartTimeoutError, type DeniedMedia } from './errors'
+export { pickMimeType, buildFilename, computeDuration, deniedMedia, withTimeout } from './util'
 
 // Detector client
 export { createDetectorClient, type DetectorClient } from './detector'

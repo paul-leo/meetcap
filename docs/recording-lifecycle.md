@@ -128,7 +128,7 @@ Also: `detector.current`, `detector.isInMeeting`.
 | `statechange` | `'idle' \| 'recording'` | Recording starts/stops |
 | `chunk` | `{ index, blob, mimeType }` | Every `timesliceMs` (~1 s) — for segmented upload |
 | `complete` | `RecordingResult` | After `stop()` finalizes the file |
-| `error` | `unknown` | Capture/IO failure |
+| `error` | `unknown` | Capture/IO failure — the same error `start()` rejects with |
 
 `RecordingResult`: `{ filePath: string \| null, recordingKey: string \| null, segments: string[], durationMs, mimeType, hasSystemAudio, meeting }`.
 
@@ -139,6 +139,7 @@ Also: `detector.current`, `detector.isInMeeting`.
 | `filenamePrefix` | `'meetcap'` | Prefix for saved files. |
 | `timesliceMs` | `1000` | Chunk/flush cadence. |
 | `persistToDisk` | `true` | Stream to disk (+manifest+resume). `false` = chunk events only. |
+| `startTimeoutMs` | `15000` | Reject `start()` if streams aren't acquired in time (`0` disables). Backstop for the native getDisplayMedia hang. |
 
 `initRecorderMain({ saveDir, revealInFolder })` controls where files land (default `<downloads>/meetcap`) and whether to reveal in the OS file manager.
 
@@ -164,6 +165,33 @@ if (status.screen !== 'granted') {
   System Settings → Privacy → Screen Recording. Returns the resulting `PermissionStatus`.
 - `openScreenRecordingSettings()` — deep-links to that pane (no-op off macOS).
 - `getPermissionStatus()` — read current status without prompting.
+
+### When a permission is denied, `start()` rejects
+
+`start()` pre-flights the permission status and **rejects with a
+`PermissionDeniedError`** (`code: 'permission-denied'`) when screen recording or
+the microphone is `denied`/`restricted` — it never hangs or resolves into limbo.
+The error carries `denied` (which permissions blocked it) and `permissions` (the
+`{ screen, microphone }` snapshot), so you can explain the failure without
+another `getPermissionStatus()` call:
+
+```ts
+import { PermissionDeniedError, StartTimeoutError } from 'meetcap-renderer'
+
+try {
+  await recorder.start(meeting)
+} catch (err) {
+  if (err instanceof PermissionDeniedError) {
+    showPermissionHelp(err.denied, err.permissions) // e.g. ['screen'], { screen: 'denied', ... }
+    await openScreenRecordingSettings()
+  } else if (err instanceof StartTimeoutError) {
+    // Native layer never delivered the streams within startTimeoutMs.
+  }
+}
+```
+
+Every rejection is also emitted as an `error` event, so fire-and-forget callers
+keep a signal — but add a `.catch()` to avoid unhandled-rejection noise.
 
 Built-in detection rules need no permissions and work out of the box — `startDetector()`
 defaults to the `presets` (Zoom / Teams / 腾讯会议 / 飞书).

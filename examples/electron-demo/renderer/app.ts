@@ -26,6 +26,7 @@ import {
   listInterruptedRecordings,
   requestPermissions,
   openScreenRecordingSettings,
+  PermissionDeniedError,
 } from 'meetcap-renderer'
 import type { MeetingInfo } from 'meetcap-core'
 
@@ -196,7 +197,19 @@ detector.on('meeting-ended', () => {
 function startRecording() {
   const opts = resumeKey ? { resumeKey } : undefined
   if (resumeKey) log(`resuming recording ${resumeKey.slice(0, 8)} (new segment)`)
-  void recorder.start(currentMeeting, opts)
+  recorder.start(currentMeeting, opts).catch((err) => {
+    if (err instanceof PermissionDeniedError) {
+      const p = err.permissions
+      log(`start rejected: ${err.message} (screen=${p.screen} mic=${p.microphone})`)
+      if (err.denied.includes('screen')) {
+        log('opening System Settings — toggle meetcap under Screen Recording, then restart')
+        void openScreenRecordingSettings()
+      }
+    } else {
+      log('start failed: ' + ((err as Error)?.message || String(err)))
+    }
+    void refreshPerms()
+  })
   resumeKey = null
 }
 $('btn-start').onclick = () => startRecording()
