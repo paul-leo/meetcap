@@ -1,0 +1,82 @@
+{
+  "name": "meetcap-web",
+  "version": "0.4.0",
+  "description": "Browser-native recording for meetcap — capture the mic, camera, a shared tab/screen (getDisplayMedia) or caller-provided streams (e.g. WebRTC remote audio), mix, record to webm, and persist crash-safe to IndexedDB. No Electron required; pairs with meetcap-renderer via meetcap-client for hybrid apps.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/cjs/index.js"
+    },
+    "./react": {
+      "types": "./dist/cjs/react.d.ts",
+      "import": "./dist/esm/react.js",
+      "require": "./dist/cjs/react.js",
+      "default": "./dist/cjs/react.js"
+    },
+    "./vue": {
+      "types": "./dist/cjs/vue.d.ts",
+      "import": "./dist/esm/vue.js",
+      "require": "./dist/cjs/vue.js",
+      "default": "./dist/cjs/vue.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node ../../scripts/write-dual-pkg.mjs dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paul-leo/meetcap.git",
+    "directory": "packages/web"
+  },
+  "keywords": [
+    "recorder",
+    "mediarecorder",
+    "getdisplaymedia",
+    "tab-audio",
+    "audio",
+    "indexeddb",
+    "meetcap"
+  ],
+  "dependencies": {
+    "meetcap-capture": "workspace:*",
+    "meetcap-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=17",
+    "vue": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "fake-indexeddb": "^6.0.0",
+    "react": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "vue": "^3.5.13"
+  }
+}
