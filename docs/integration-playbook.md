@@ -86,6 +86,35 @@ Semantics:
 detector state — key your dismissal on `meeting.meetingId` and ignore further
 events for that id, rather than trying to reset the detector.
 
+## App-global recording UI with hooks
+
+A recording is app-global state: it must survive route changes and component
+unmounts. The React/Vue hooks support that directly:
+
+```tsx
+// Any component, any route — all bind to the same app-global recorder.
+const { state, elapsedMs, error, permissionIssue, start, stop } =
+  useRecorder({ shared: true })
+
+// Meeting awareness anywhere, with occurrence identity built in.
+const { meeting, isInMeeting } = useMeetingDetector({
+  onDetected: (m) => showPrompt(m),          // m.meetingId identifies the occurrence
+  onEnded: (m) => stopIfRecording(m.meetingId),
+})
+```
+
+- `shared: true` — one recorder for the whole app, created on first use;
+  unmounting a component only unsubscribes it. Without it (default) the
+  recorder is per-component and destroyed on unmount.
+- `elapsedMs` — live recorded duration, paused time excluded, corrected from
+  `complete.durationMs`. No hand-rolled timers.
+- `error` / `permissionIssue` — the last failure, with
+  `{ screen, microphone }` pre-derived from `PermissionDeniedError` so
+  permission-help UI is a render expression.
+- `useMeetingDetector` shares one detector client app-wide and syncs a
+  meeting already in progress at startup (`onDetected` fires for it too).
+  Non-hook code gets the same via `createDetectorClient({ syncInitial: true })`.
+
 ## Multi-window apps
 
 - The detector broadcasts edge events to **all** windows. Run the
