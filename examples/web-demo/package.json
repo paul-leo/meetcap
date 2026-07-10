@@ -1,6 +1,6 @@
 {
   "name": "web-demo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "meetcap-web demo — browser-only recording: test tone (zero permissions), mic, shared tab/screen, IndexedDB library with crash-resume.",
   "scripts": {
