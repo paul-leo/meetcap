@@ -286,11 +286,24 @@ export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
     }
   })
 
+  // Deep-links into the macOS privacy panes — the guidance half of a denied
+  // permission: PermissionDeniedError.denied names the pane to send the user to.
+  const PRIVACY_PANE_URLS: Record<string, string> = {
+    screen: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+    microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+    camera: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
+  }
+
   ipcMain.handle(IPC.openScreenSettings, () => {
     if (process.platform === 'darwin') {
-      void shell.openExternal(
-        'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-      )
+      void shell.openExternal(PRIVACY_PANE_URLS.screen)
+    }
+  })
+
+  ipcMain.handle(IPC.openPrivacySettings, (_evt, { pane }: { pane: string }) => {
+    const url = PRIVACY_PANE_URLS[pane]
+    if (process.platform === 'darwin' && url) {
+      void shell.openExternal(url)
     }
   })
 }

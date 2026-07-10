@@ -11,6 +11,7 @@ describe('IPC channel contract', () => {
       mediaAccess: 'meetcap:media-access',
       requestPermissions: 'meetcap:request-permissions',
       openScreenSettings: 'meetcap:open-screen-settings',
+      openPrivacySettings: 'meetcap:open-privacy-settings',
       recordingOpen: 'meetcap:recording-open',
       recordingWrite: 'meetcap:recording-write',
       recordingClose: 'meetcap:recording-close',

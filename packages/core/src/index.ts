@@ -156,6 +156,9 @@ export interface InterruptedRecording {
   lastSegmentPath: string
 }
 
+/** A macOS privacy pane that meetcap can deep-link to for permission guidance. */
+export type PrivacyPane = 'screen' | 'microphone' | 'camera'
+
 /** macOS media-permission snapshot (other platforms report "n/a"). */
 export interface PermissionStatus {
   platform: string
@@ -190,8 +193,15 @@ export interface MeetcapBridge {
    * the user to settings (then restart). Returns the resulting status.
    */
   requestPermissions(): Promise<PermissionStatus>
-  /** Open the macOS Screen Recording privacy pane (no-op elsewhere). */
+  /** Open the macOS Screen Recording privacy pane (no-op elsewhere). Alias of openPrivacySettings('screen'). */
   openScreenRecordingSettings(): Promise<void>
+  /**
+   * Open the macOS System Settings privacy pane for the given media — the
+   * guidance half of a `PermissionDeniedError`: read `err.denied` and send
+   * the user to the matching pane. No-op on other platforms. Note screen
+   * recording additionally requires an app restart after the user toggles it.
+   */
+  openPrivacySettings(pane: PrivacyPane): Promise<void>
   /** Open a recording segment and start streaming (new or resumed). */
   openRecording(args: OpenRecordingArgs): Promise<RecordingHandle>
   /** Append one chunk of bytes to an open segment (called per timeslice). */
@@ -238,6 +248,7 @@ export const IPC = {
   mediaAccess: 'meetcap:media-access',
   requestPermissions: 'meetcap:request-permissions',
   openScreenSettings: 'meetcap:open-screen-settings',
+  openPrivacySettings: 'meetcap:open-privacy-settings',
   recordingOpen: 'meetcap:recording-open',
   recordingWrite: 'meetcap:recording-write',
   recordingClose: 'meetcap:recording-close',

@@ -38,6 +38,8 @@ export function exposeMeetcapBridge(
     requestPermissions: () =>
       ipcRenderer.invoke(IPC.requestPermissions) as ReturnType<MeetcapBridge['requestPermissions']>,
     openScreenRecordingSettings: () => ipcRenderer.invoke(IPC.openScreenSettings) as Promise<void>,
+    openPrivacySettings: (pane: Parameters<MeetcapBridge['openPrivacySettings']>[0]) =>
+      ipcRenderer.invoke(IPC.openPrivacySettings, { pane }) as Promise<void>,
     openRecording: (args: Parameters<MeetcapBridge['openRecording']>[0]) =>
       ipcRenderer.invoke(IPC.recordingOpen, args) as ReturnType<MeetcapBridge['openRecording']>,
     writeRecordingChunk: (id: string, chunk: ArrayBuffer) =>

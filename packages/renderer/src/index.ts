@@ -19,6 +19,7 @@ export {
   listInterruptedRecordings,
   requestPermissions,
   openScreenRecordingSettings,
+  openPrivacySettings,
   getPermissionStatus,
   readRecording,
   deleteRecording,
