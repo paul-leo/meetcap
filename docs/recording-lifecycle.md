@@ -156,7 +156,7 @@ within a single poll interval is indistinguishable and keeps the same id.
 | `complete` | `RecordingResult` | After `stop()` finalizes the file |
 | `error` | `unknown` | Capture/IO failure — the same error `start()` rejects with |
 
-`RecordingResult`: `{ filePath: string \| null, recordingKey: string \| null, segments: string[], durationMs, mimeType, hasSystemAudio, meeting }`.
+`RecordingResult`: `{ filePath: string \| null, recordingKey: string \| null, segments: string[], durationMs, mimeType, hasSystemAudio, videoSource, meeting }`.
 
 ## `createRecorder` options
 
@@ -168,6 +168,27 @@ within a single poll interval is indistinguishable and keeps the same id.
 | `startTimeoutMs` | `15000` | Reject `start()` if streams aren't acquired in time (`0` disables). Backstop for the native getDisplayMedia hang. |
 
 `initRecorderMain({ saveDir, revealInFolder })` controls where files land (default `<downloads>/meetcap`) and whether to reveal in the OS file manager.
+
+## Screen / camera video
+
+Recording is audio-only by default. Add a video track per recording via
+`start()`'s options — the output becomes a `video/webm` (VP9/VP8 + opus) file,
+everything else (chunks, streaming to disk, resume, upload) works the same:
+
+```ts
+await recorder.start(meeting, { video: 'screen' })   // what the user sees + both audio sides
+await recorder.start(meeting, { video: 'camera' })   // the user's camera + both audio sides
+```
+
+- `'screen'` reuses the display capture that already provides system audio —
+  no permission beyond Screen Recording, no extra prompt.
+- `'camera'` calls `getUserMedia({ video: true })`; macOS prompts for Camera
+  on first use. A denied camera makes `start()` reject with
+  `PermissionDeniedError` (`denied` includes `'camera'`) — the permission
+  snapshot now carries `camera` too. `requestPermissions()` deliberately does
+  NOT pre-prompt for camera; the prompt appears on the first camera recording.
+- `complete`'s `result.videoSource` reports `'screen' | 'camera' | null`, and
+  `result.mimeType` tells you what was actually encoded.
 
 ## Permissions — request up front
 

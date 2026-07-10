@@ -5,7 +5,7 @@
  */
 import type { PermissionStatus } from 'meetcap-core'
 
-export type DeniedMedia = 'screen' | 'microphone'
+export type DeniedMedia = 'screen' | 'microphone' | 'camera'
 
 /** `start()` failed because an OS media permission is denied or restricted. */
 export class PermissionDeniedError extends Error {

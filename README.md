@@ -1,6 +1,6 @@
 # meetcap
 
-**Detect a meeting and record both sides of the audio — in any Electron app.**
+**Detect a meeting and record both sides of the audio — plus, optionally, the screen or camera — in any Electron app.**
 
 meetcap answers one question honestly: can an Electron app notice you've joined a meeting (Zoom / Teams / 腾讯会议 / 飞书) and record *both* your microphone *and* the other party's voice (system / loopback audio), then save it locally — with a hardened, production-style config?
 

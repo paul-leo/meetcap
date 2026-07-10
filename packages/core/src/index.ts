@@ -92,6 +92,8 @@ export interface RecordingResult {
   durationMs: number
   mimeType: string
   hasSystemAudio: boolean
+  /** Video track source of this recording — null for audio-only (the default). */
+  videoSource: 'screen' | 'camera' | null
   meeting: MeetingInfo | null
 }
 
@@ -159,6 +161,8 @@ export interface PermissionStatus {
   platform: string
   screen: string
   microphone: string
+  /** Camera status — only relevant when recording with `video: 'camera'`. Optional for older mains. */
+  camera?: string
 }
 
 /**
