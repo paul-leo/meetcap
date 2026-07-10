@@ -15,15 +15,30 @@ type DetectedHandler = (meeting: MeetingInfo) => void
 /** Receives the meeting that ended (same `meetingId` as its detected event). */
 type EndedHandler = (meeting: MeetingInfo) => void
 
+export interface CreateDetectorClientOptions {
+  /**
+   * Probe once with detectOnce() on creation; if a meeting is already being
+   * tracked, adopt it as `current` and fire `meeting-detected` handlers.
+   * Catches the "window created mid-meeting" case where the edge event was
+   * broadcast before this client existed. The probe is async (one IPC round
+   * trip), so handlers registered right after createDetectorClient() still
+   * receive it. Default false.
+   */
+  syncInitial?: boolean
+}
+
 export interface DetectorClient {
   on(event: 'meeting-detected', fn: DetectedHandler): DetectorClient
   on(event: 'meeting-ended', fn: EndedHandler): DetectorClient
+  /** Unsubscribe a handler added with on() — for shared clients that outlive a subscriber. */
+  off(event: 'meeting-detected', fn: DetectedHandler): DetectorClient
+  off(event: 'meeting-ended', fn: EndedHandler): DetectorClient
   readonly current: MeetingInfo | null
   readonly isInMeeting: boolean
   destroy(): void
 }
 
-export function createDetectorClient(): DetectorClient {
+export function createDetectorClient(options: CreateDetectorClientOptions = {}): DetectorClient {
   const detected = new Set<DetectedHandler>()
   const ended = new Set<EndedHandler>()
   let current: MeetingInfo | null = null
@@ -41,10 +56,31 @@ export function createDetectorClient(): DetectorClient {
     }
   })
 
+  if (options.syncInitial) {
+    void window.meetcap
+      .detectOnce()
+      .then((m) => {
+        // Only adopt if no edge event beat the probe to it.
+        if (m && current === null) {
+          current = m
+          detected.forEach((fn) => fn(m))
+        }
+      })
+      .catch(() => {
+        // best-effort probe — edge events still arrive
+      })
+  }
+
   const client: DetectorClient = {
     on(event: 'meeting-detected' | 'meeting-ended', fn: DetectedHandler | EndedHandler) {
       if (event === 'meeting-detected') detected.add(fn as DetectedHandler)
       else ended.add(fn as EndedHandler)
+      return client
+    },
+
+    off(event: 'meeting-detected' | 'meeting-ended', fn: DetectedHandler | EndedHandler) {
+      if (event === 'meeting-detected') detected.delete(fn as DetectedHandler)
+      else ended.delete(fn as EndedHandler)
       return client
     },
     get current() {

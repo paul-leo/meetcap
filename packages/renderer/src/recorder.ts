@@ -59,6 +59,11 @@ export interface Recorder {
   on(event: 'complete', fn: CompleteHandler): Recorder
   on(event: 'chunk', fn: ChunkHandler): Recorder
   on(event: 'error', fn: ErrorHandler): Recorder
+  /** Unsubscribe a handler added with on() — for shared recorders that outlive a subscriber. */
+  off(event: 'statechange', fn: StateHandler): Recorder
+  off(event: 'complete', fn: CompleteHandler): Recorder
+  off(event: 'chunk', fn: ChunkHandler): Recorder
+  off(event: 'error', fn: ErrorHandler): Recorder
   /**
    * Start capturing. `meeting` names the file; `opts.resumeKey` continues a
    * recording. Rejects (and emits `error`) when the capture can't start —
@@ -180,6 +185,14 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
       else if (event === 'complete') completeHandlers.add(fn as CompleteHandler)
       else if (event === 'chunk') chunkHandlers.add(fn as ChunkHandler)
       else errorHandlers.add(fn as ErrorHandler)
+      return recorder
+    },
+
+    off(event, fn) {
+      if (event === 'statechange') stateHandlers.delete(fn as StateHandler)
+      else if (event === 'complete') completeHandlers.delete(fn as CompleteHandler)
+      else if (event === 'chunk') chunkHandlers.delete(fn as ChunkHandler)
+      else errorHandlers.delete(fn as ErrorHandler)
       return recorder
     },
 
