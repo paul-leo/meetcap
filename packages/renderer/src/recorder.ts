@@ -13,8 +13,9 @@
  *
  * Requires `window.meetcap` (see meetcap-core/preload) and `initRecorderMain()`.
  */
-import type { MeetingInfo, RecordingResult } from 'meetcap-core'
-import { buildFilename, computeDuration, pickMimeType } from './util'
+import type { MeetingInfo, PermissionStatus, RecordingResult } from 'meetcap-core'
+import { PermissionDeniedError, StartTimeoutError } from './errors'
+import { buildFilename, computeDuration, deniedMedia, pickMimeType, withTimeout } from './util'
 
 export type RecorderState = 'idle' | 'recording' | 'paused'
 
@@ -33,6 +34,14 @@ export interface CreateRecorderOptions {
   timesliceMs?: number
   /** Stream to disk (file + manifest + resume). Default true. Set false for upload-only. */
   persistToDisk?: boolean
+  /**
+   * Backstop for `start()`: reject if the audio streams aren't acquired within
+   * this many ms (the native getDisplayMedia layer can hang forever when
+   * screen-recording permission is missing — the known-denied case is caught
+   * instantly by a permission pre-flight, this covers the rest). Default
+   * 15000; `0` disables.
+   */
+  startTimeoutMs?: number
 }
 
 export interface StartOptions {
@@ -50,13 +59,21 @@ export interface Recorder {
   on(event: 'complete', fn: CompleteHandler): Recorder
   on(event: 'chunk', fn: ChunkHandler): Recorder
   on(event: 'error', fn: ErrorHandler): Recorder
-  /** Start capturing. `meeting` names the file; `opts.resumeKey` continues a recording. */
+  /**
+   * Start capturing. `meeting` names the file; `opts.resumeKey` continues a
+   * recording. Rejects (and emits `error`) when the capture can't start —
+   * with `PermissionDeniedError` when an OS media permission is denied, or
+   * `StartTimeoutError` when the native layer never delivers the streams.
+   */
   start(meeting?: MeetingInfo | null, opts?: StartOptions): Promise<void>
   /** Pause capturing within the same segment/file. No-op unless `recording`. */
   pause(): void
   /** Resume a paused capture (same segment/file). No-op unless `paused`. */
   resume(): void
-  /** Stop capturing; fires `complete` once the segment is finalized. */
+  /**
+   * Stop capturing; fires `complete` once the segment is finalized. Called
+   * while a `start()` is still pending, it aborts that start instead.
+   */
   stop(): void
   readonly state: RecorderState
   /** Logical-recording key of the in-progress/last recording (null if none / not persisting). */
@@ -103,6 +120,7 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
   const prefix = options.filenamePrefix ?? 'meetcap'
   const timesliceMs = options.timesliceMs ?? 1000
   const persistToDisk = options.persistToDisk ?? true
+  const startTimeoutMs = options.startTimeoutMs ?? 15000
   const stateHandlers = new Set<StateHandler>()
   const completeHandlers = new Set<CompleteHandler>()
   const chunkHandlers = new Set<ChunkHandler>()
@@ -121,12 +139,40 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
   let hasSystemAudio = false
   // Serializes disk writes so chunks land in capture order (webm header first).
   let writeChain: Promise<void> = Promise.resolve()
+  // Bumped by every start() and by stop()/destroy() while no recorder exists,
+  // so a pending start() notices it was superseded/aborted after each await.
+  let startEpoch = 0
 
   const setState = (s: RecorderState) => {
     state = s
     stateHandlers.forEach((fn) => fn(s))
   }
   const emitError = (err: unknown) => errorHandlers.forEach((fn) => fn(err))
+
+  const safePermissions = async (): Promise<PermissionStatus | null> => {
+    try {
+      return await window.meetcap.mediaAccess()
+    } catch {
+      return null
+    }
+  }
+
+  // Wrap failures that are really permission problems (declined prompt, or a
+  // timeout while a permission is denied) into PermissionDeniedError with a
+  // fresh snapshot, so callers can explain them without another round-trip.
+  const translateStartError = async (err: unknown): Promise<unknown> => {
+    if (err instanceof PermissionDeniedError) return err
+    const isTimeout = err instanceof StartTimeoutError
+    const isNativeDenial =
+      typeof DOMException !== 'undefined' &&
+      err instanceof DOMException &&
+      err.name === 'NotAllowedError'
+    if (!isTimeout && !isNativeDenial) return err
+    const perms = await safePermissions()
+    const denied = perms ? deniedMedia(perms) : []
+    if (perms && denied.length > 0) return new PermissionDeniedError(denied, perms, err)
+    return isTimeout ? new StartTimeoutError(err.timeoutMs, perms ?? err.permissions) : err
+  }
 
   const recorder: Recorder = {
     on(event, fn) {
@@ -139,9 +185,36 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
 
     async start(m = null, opts = {}) {
       if (state !== 'idle') return
+      const epoch = ++startEpoch
       meeting = m
       try {
-        const built = await buildMixedStream()
+        // Pre-flight: a known-denied permission fails fast instead of letting
+        // getDisplayMedia hang (on macOS the loopback display-media handler
+        // never calls back when screen recording is denied).
+        let perms: PermissionStatus | null = null
+        try {
+          perms = await window.meetcap.mediaAccess()
+        } catch {
+          // best-effort gate — the timeout below still covers the hang
+        }
+        if (perms) {
+          const denied = deniedMedia(perms)
+          if (denied.length > 0) throw new PermissionDeniedError(denied, perms)
+        }
+        if (epoch !== startEpoch) return
+
+        const built = await withTimeout(
+          buildMixedStream(),
+          startTimeoutMs,
+          () => new StartTimeoutError(startTimeoutMs, perms),
+          (late) => late.cleanup(),
+        )
+        if (epoch !== startEpoch) {
+          // Aborted (stop/destroy) or superseded by a newer start(): release
+          // our streams without touching the newer session's state.
+          built.cleanup()
+          return
+        }
         cleanup = built.cleanup
         hasSystemAudio = built.hasSystemAudio
         startedAt = Date.now()
@@ -159,6 +232,12 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
             meeting,
             mimeType,
           })
+          if (epoch !== startEpoch) {
+            built.cleanup()
+            if (cleanup === built.cleanup) cleanup = null
+            void window.meetcap.closeRecording(handle.id).catch(() => {})
+            return
+          }
           openId = handle.id
           recordingKey = handle.recordingKey
         } else {
@@ -182,10 +261,19 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
         mediaRecorder.start(timesliceMs)
         setState('recording')
       } catch (err) {
-        emitError(err)
-        cleanup?.()
-        cleanup = null
-        openId = null
+        const error = await translateStartError(err)
+        if (epoch === startEpoch) {
+          cleanup?.()
+          cleanup = null
+          hasSystemAudio = false
+          // Close a half-open segment so it doesn't linger as a phantom
+          // "interrupted" recording.
+          const id = openId
+          openId = null
+          if (id) void window.meetcap.closeRecording(id).catch(() => {})
+        }
+        emitError(error)
+        throw error
       }
     },
 
@@ -205,7 +293,12 @@ export function createRecorder(options: CreateRecorderOptions = {}): Recorder {
     },
 
     stop() {
-      if (!mediaRecorder || mediaRecorder.state === 'inactive') return
+      if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        // No active recording — but a start() may be pending; bumping the
+        // epoch makes it abort (and release its streams) at its next check.
+        startEpoch++
+        return
+      }
       const mr = mediaRecorder
       const durationMs = computeDuration(startedAt, Date.now(), pausedAccumMs, pausedAt)
       mr.onstop = () => {

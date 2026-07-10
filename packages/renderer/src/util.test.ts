@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { pickMimeType, buildFilename, computeDuration } from './util'
+import { describe, it, expect, vi } from 'vitest'
+import { pickMimeType, buildFilename, computeDuration, deniedMedia, withTimeout } from './util'
+import { PermissionDeniedError, StartTimeoutError } from './errors'
 
 describe('computeDuration', () => {
   it('is wall-clock when never paused', () => {
@@ -43,5 +44,101 @@ describe('buildFilename', () => {
   })
   it('falls back to "meeting" with no meeting and honors a custom prefix', () => {
     expect(buildFilename(null, date, 'rec')).toBe('rec-meeting-2026-06-17T14-30-45.webm')
+  })
+})
+
+describe('deniedMedia', () => {
+  const status = (screen: string, microphone: string) => ({ platform: 'darwin', screen, microphone })
+
+  it('returns nothing when everything is granted', () => {
+    expect(deniedMedia(status('granted', 'granted'))).toEqual([])
+  })
+  it('reports denied screen', () => {
+    expect(deniedMedia(status('denied', 'granted'))).toEqual(['screen'])
+  })
+  it('reports restricted as blocked', () => {
+    expect(deniedMedia(status('granted', 'restricted'))).toEqual(['microphone'])
+  })
+  it('reports both when both are blocked', () => {
+    expect(deniedMedia(status('denied', 'denied'))).toEqual(['screen', 'microphone'])
+  })
+  it('treats not-determined as non-blocking (prompt still possible)', () => {
+    expect(deniedMedia(status('not-determined', 'not-determined'))).toEqual([])
+  })
+  it('treats n/a (non-darwin) as non-blocking', () => {
+    expect(deniedMedia({ platform: 'win32', screen: 'n/a', microphone: 'n/a' })).toEqual([])
+  })
+})
+
+describe('withTimeout', () => {
+  it('passes through a resolution before the timeout', async () => {
+    await expect(withTimeout(Promise.resolve('ok'), 1000, () => new Error('timeout'))).resolves.toBe('ok')
+  })
+  it('passes through a rejection before the timeout', async () => {
+    await expect(withTimeout(Promise.reject(new Error('boom')), 1000, () => new Error('timeout'))).rejects.toThrow(
+      'boom',
+    )
+  })
+  it('rejects with the provided error after the timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const p = withTimeout(new Promise(() => {}), 500, () => new Error('timed out'))
+      const assertion = expect(p).rejects.toThrow('timed out')
+      vi.advanceTimersByTime(500)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('disposes a late resolution via onLate', async () => {
+    vi.useFakeTimers()
+    try {
+      let resolveLate!: (v: string) => void
+      const late = new Promise<string>((r) => (resolveLate = r))
+      const onLate = vi.fn()
+      const p = withTimeout(late, 500, () => new Error('timed out'), onLate)
+      const assertion = expect(p).rejects.toThrow('timed out')
+      vi.advanceTimersByTime(500)
+      await assertion
+      resolveLate('stream')
+      await Promise.resolve() // let the onLate continuation run
+      expect(onLate).toHaveBeenCalledWith('stream')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('ms <= 0 disables the timeout', async () => {
+    let resolve!: (v: string) => void
+    const p = withTimeout(new Promise<string>((r) => (resolve = r)), 0, () => new Error('timeout'))
+    resolve('ok')
+    await expect(p).resolves.toBe('ok')
+  })
+})
+
+describe('start() error types', () => {
+  it('PermissionDeniedError carries code, denied list and snapshot', () => {
+    const perms = { platform: 'darwin', screen: 'denied', microphone: 'granted' }
+    const err = new PermissionDeniedError(['screen'], perms)
+    expect(err).toBeInstanceOf(Error)
+    expect(err).toBeInstanceOf(PermissionDeniedError)
+    expect(err.name).toBe('PermissionDeniedError')
+    expect(err.code).toBe('permission-denied')
+    expect(err.denied).toEqual(['screen'])
+    expect(err.permissions).toBe(perms)
+    expect(err.message).toContain('screen')
+  })
+  it('PermissionDeniedError preserves the original cause', () => {
+    const cause = new Error('NotAllowedError')
+    const err = new PermissionDeniedError(['microphone'], { platform: 'darwin', screen: 'granted', microphone: 'denied' }, cause)
+    expect(err.cause).toBe(cause)
+  })
+  it('StartTimeoutError carries code, timeout and snapshot', () => {
+    const err = new StartTimeoutError(15000, null)
+    expect(err).toBeInstanceOf(StartTimeoutError)
+    expect(err.name).toBe('StartTimeoutError')
+    expect(err.code).toBe('start-timeout')
+    expect(err.timeoutMs).toBe(15000)
+    expect(err.permissions).toBeNull()
+    expect(err.message).toContain('15000')
   })
 })

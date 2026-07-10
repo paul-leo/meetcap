@@ -24,6 +24,7 @@ export interface UseRecorderOptions extends CreateRecorderOptions {
 export function useRecorder(options?: UseRecorderOptions): {
   state: Ref<RecorderState>
   lastResult: Ref<RecordingResult | null>
+  /** Rejects on failure (e.g. PermissionDeniedError) — same contract as recorder.start(). */
   start: (meeting?: MeetingInfo | null, opts?: StartOptions) => Promise<void>
   pause: () => void
   resume: () => void

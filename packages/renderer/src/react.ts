@@ -26,6 +26,7 @@ export interface UseRecorder {
   state: RecorderState
   /** The last finished recording (already written to disk unless persistToDisk is off). */
   lastResult: RecordingResult | null
+  /** Rejects on failure (e.g. PermissionDeniedError) — same contract as recorder.start(). */
   start: (meeting?: MeetingInfo | null, opts?: StartOptions) => Promise<void>
   pause: () => void
   resume: () => void
