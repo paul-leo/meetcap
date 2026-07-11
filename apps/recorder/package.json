@@ -5,20 +5,54 @@
   "description": "meetcap Recorder — menu-bar screen/meeting recorder: screen + system audio + mic (+ camera), meeting auto-detection, crash-safe local library. The desktop enhancer for meetcap-web pages (agent mode, Phase 3).",
   "main": "main.js",
   "scripts": {
-    "build": "esbuild renderer/bar.ts renderer/library.ts --bundle --outdir=renderer --platform=browser --format=iife --sourcemap --define:__HARNESS_ENABLED__=true",
+    "build": "esbuild renderer/bar.ts renderer/library.ts renderer/picker.ts --bundle --outdir=renderer --platform=browser --format=iife --sourcemap --define:__HARNESS_ENABLED__=true",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
-    "build:dist": "esbuild renderer/bar.ts renderer/library.ts --bundle --outdir=renderer --platform=browser --format=iife --define:__HARNESS_ENABLED__=false"
+    "build:dist": "esbuild renderer/bar.ts renderer/library.ts renderer/picker.ts --bundle --outdir=renderer --platform=browser --format=iife --define:__HARNESS_ENABLED__=false",
+    "dist": "npm run build:dist && electron-builder --mac"
   },
+  "build": {
+    "appId": "app.meetcap.recorder",
+    "productName": "meetcap Recorder",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/*.html",
+      "renderer/*.js",
+      "!renderer/*.map"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "identity": null,
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSMicrophoneUsageDescription": "meetcap Recorder captures meeting audio from your microphone.",
+        "NSCameraUsageDescription": "meetcap Recorder can include your camera in recordings."
+      }
+    }
+  },
+  "author": "paul-leo",
   "dependencies": {
     "meetcap-core": "workspace:*",
     "meetcap-main": "workspace:*",
     "meetcap-renderer": "workspace:*"
   },
   "devDependencies": {
+    "@harness-fe/runtime": "^4.3.1",
     "electron": "^38.2.2",
+    "electron-builder": "^26.0.0",
     "esbuild": "^0.24.0",
-    "typescript": "^5.6.3",
-    "@harness-fe/runtime": "^4.3.1"
+    "typescript": "^5.6.3"
   }
 }
