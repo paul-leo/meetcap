@@ -31,6 +31,8 @@ export {
   type RecorderState,
   type CreateRecorderOptions,
   type StartOptions,
+  type CaptureSpec,
+  resolveCaptureSpec,
   type RecordingChunk,
 } from './recorder'
 // Shared engine surface (errors + pure utils) — re-exported from meetcap-capture

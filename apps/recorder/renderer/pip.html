@@ -32,7 +32,11 @@
   </div>
   <script>
     const v = document.getElementById('v')
-    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 640 }, audio: false })
+    const deviceId = new URLSearchParams(location.search).get('deviceId')
+    const video = deviceId
+      ? { deviceId: { exact: deviceId }, width: 640, height: 640 }
+      : { width: 640, height: 640 }
+    navigator.mediaDevices.getUserMedia({ video, audio: false })
       .then((stream) => { v.srcObject = stream })
       .catch((e) => {
         const d = document.createElement('div')

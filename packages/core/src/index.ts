@@ -224,6 +224,12 @@ export interface MeetcapBridge {
   deleteRecording(filePath: string): Promise<void>
   /** Whether a recording file still exists on disk (restricted to saveDir). */
   recordingExists(filePath: string): Promise<boolean>
+  /**
+   * Pick which screen/window the loopback display-media handler captures
+   * (a desktopCapturer source id from listWindows()); null = first screen
+   * (the default). Takes effect on the next recording start.
+   */
+  setLoopbackSource(sourceId: string | null): Promise<void>
   /** Enable the loopback display-media handler (electron-audio-loopback). */
   enableLoopbackAudio(): Promise<void>
   /** Disable the loopback display-media handler. */
@@ -256,6 +262,7 @@ export const IPC = {
   recordingRead: 'meetcap:recording-read',
   recordingDelete: 'meetcap:recording-delete',
   recordingExists: 'meetcap:recording-exists',
+  setLoopbackSource: 'meetcap:set-loopback-source',
   enableLoopback: 'enable-loopback-audio',
   disableLoopback: 'disable-loopback-audio',
 } as const

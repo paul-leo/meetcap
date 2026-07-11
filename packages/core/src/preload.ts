@@ -54,6 +54,8 @@ export function exposeMeetcapBridge(
       ipcRenderer.invoke(IPC.recordingDelete, { filePath }) as Promise<void>,
     recordingExists: (filePath: string) =>
       ipcRenderer.invoke(IPC.recordingExists, { filePath }) as Promise<boolean>,
+    setLoopbackSource: (sourceId: string | null) =>
+      ipcRenderer.invoke(IPC.setLoopbackSource, { sourceId }) as Promise<void>,
     enableLoopbackAudio: () => ipcRenderer.invoke(IPC.enableLoopback) as Promise<void>,
     disableLoopbackAudio: () => ipcRenderer.invoke(IPC.disableLoopback) as Promise<void>,
   }

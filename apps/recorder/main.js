@@ -82,7 +82,7 @@ function showLibrary() {
 }
 
 // Camera PiP bubble — zero compositing: the screen capture just films it.
-function showPip() {
+function showPip(deviceId) {
   if (pip && !pip.isDestroyed()) return
   const { workArea } = screen.getPrimaryDisplay()
   const SIZE = 180
@@ -101,7 +101,7 @@ function showPip() {
   })
   pip.setAlwaysOnTop(true, 'screen-saver')
   pip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  pip.loadFile(path.join(__dirname, 'renderer', 'pip.html'))
+  pip.loadFile(path.join(__dirname, 'renderer', 'pip.html'), deviceId ? { query: { deviceId } } : undefined)
   pip.on('closed', () => (pip = null))
 }
 function hidePip() {
@@ -189,23 +189,61 @@ ipcMain.handle('recorder-app:open-folder', () => {
 ipcMain.handle('recorder-app:reveal', (_e, filePath) => shell.showItemInFolder(filePath))
 ipcMain.handle('recorder-app:show-library', () => showLibrary())
 ipcMain.handle('recorder-app:hide-bar', () => bar?.hide())
-ipcMain.handle('recorder-app:pip', (_e, show) => (show ? showPip() : hidePip()))
+ipcMain.handle('recorder-app:pip', (_e, show, deviceId) => (show ? showPip(deviceId) : hidePip()))
 
-// Source menu — a native popup anchored to the bar (simple + macOS-native).
-ipcMain.handle('recorder-app:source-menu', (e, current) => {
+// Source menu — four independent toggles with device submenus, macOS-native.
+// The renderer supplies current state + enumerated devices; one click = one
+// adjustment; the updated state is resolved back.
+ipcMain.handle('recorder-app:source-menu', (e, p) => {
   return new Promise((resolve) => {
     let result = null
-    const pick = (mode) => () => (result = { mode })
+    const set = (patch) => () => (result = patch)
+    const radio = (items, currentId, make) =>
+      items.map((it) => ({ label: it.label, type: 'radio', checked: currentId === it.id, click: set(make(it.id)) }))
+
+    const screenSources = radio(p.screens, p.state.screen.sourceId, (id) => ({ screen: { sourceId: id } }))
+    const windowSources = radio(p.windows, p.state.screen.sourceId, (id) => ({ screen: { sourceId: id } }))
     const menu = Menu.buildFromTemplate([
-      { label: 'Screen + audio', type: 'radio', checked: current.mode === 'screen', click: pick('screen') },
-      { label: 'Audio only', type: 'radio', checked: current.mode === '', click: pick('') },
-      { label: 'Camera + audio', type: 'radio', checked: current.mode === 'camera', click: pick('camera') },
+      {
+        label: 'Screen',
+        type: 'checkbox',
+        checked: p.state.screen.on,
+        click: set({ screen: { on: !p.state.screen.on } }),
+      },
+      {
+        label: '    Source',
+        enabled: p.state.screen.on,
+        submenu: [
+          ...screenSources,
+          ...(windowSources.length ? [{ type: 'separator' }, { label: 'Windows', enabled: false }, ...windowSources] : []),
+        ],
+      },
       { type: 'separator' },
       {
-        label: 'Camera bubble',
+        label: 'Camera',
         type: 'checkbox',
-        checked: current.pip,
-        click: () => (result = { pip: !current.pip }),
+        checked: p.state.camera.on,
+        enabled: p.cams.length > 0,
+        click: set({ camera: { on: !p.state.camera.on } }),
+      },
+      ...(p.cams.length > 1
+        ? [{ label: '    Device', enabled: p.state.camera.on, submenu: radio(p.cams, p.state.camera.deviceId ?? p.cams[0].id, (id) => ({ camera: { deviceId: id } })) }]
+        : []),
+      {
+        label: 'Microphone',
+        type: 'checkbox',
+        checked: p.state.mic.on,
+        enabled: p.mics.length > 0,
+        click: set({ mic: { on: !p.state.mic.on } }),
+      },
+      ...(p.mics.length > 1
+        ? [{ label: '    Device', enabled: p.state.mic.on, submenu: radio(p.mics, p.state.mic.deviceId ?? p.mics[0].id, (id) => ({ mic: { deviceId: id } })) }]
+        : []),
+      {
+        label: 'System audio',
+        type: 'checkbox',
+        checked: p.state.sys.on,
+        click: set({ sys: { on: !p.state.sys.on } }),
       },
     ])
     menu.popup({

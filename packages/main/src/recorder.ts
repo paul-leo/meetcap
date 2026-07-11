@@ -68,12 +68,21 @@ export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
   // request — deny via callback({}) so the renderer gets a rejection.
   const resolveSession = () =>
     options.partition ? session.fromPartition(options.partition) : session.defaultSession
+  // Which screen/window the handler serves (a desktopCapturer source id from
+  // listWindows()); null = first screen. Set via IPC before a recording start.
+  let loopbackSourceId: string | null = null
   const bindLoopbackHandler = () => {
     resolveSession().setDisplayMediaRequestHandler(async (_req, callback) => {
       try {
-        const sources = await desktopCapturer.getSources({ types: ['screen'] })
-        if (sources.length === 0) throw new Error('meetcap: no screen sources')
-        callback({ video: sources[0], audio: 'loopback' })
+        const sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 1, height: 1 },
+        })
+        const picked =
+          (loopbackSourceId && sources.find((s) => s.id === loopbackSourceId)) ??
+          sources.find((s) => s.id.startsWith('screen:'))
+        if (!picked) throw new Error('meetcap: no capture sources')
+        callback({ video: picked, audio: 'loopback' })
       } catch {
         callback({})
       }
@@ -84,6 +93,9 @@ export function initRecorderMain(options: InitRecorderMainOptions = {}): void {
   ipcMain.removeHandler(IPC.disableLoopback)
   ipcMain.handle(IPC.disableLoopback, () => {
     resolveSession().setDisplayMediaRequestHandler(null)
+  })
+  ipcMain.handle(IPC.setLoopbackSource, (_evt, { sourceId }: { sourceId: string | null }) => {
+    loopbackSourceId = sourceId
   })
 
   const revealInFolder = options.revealInFolder ?? true

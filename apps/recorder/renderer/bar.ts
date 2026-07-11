@@ -22,39 +22,69 @@ import {
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement
 
-// ── source state ──────────────────────────────────────────────────────────────
-type Mode = '' | 'screen' | 'camera'
-let mode: Mode = 'screen'
-let pipOn = false
-
-const SOURCE_META: Record<Mode, { label: string; icon: string }> = {
-  screen: {
-    label: 'Screen',
-    icon: '<rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 21h6M12 17v4"/>',
-  },
-  '': {
-    label: 'Audio',
-    icon: '<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/>',
-  },
-  camera: {
-    label: 'Camera',
-    icon: '<path d="M15 10l4.5-2.5v9L15 14"/><rect x="2.5" y="6" width="12.5" height="12" rx="2"/>',
-  },
+// ── capture state: four independent toggles ─────────────────────────────────
+const cap: CapState = {
+  screen: { on: true, sourceId: null },
+  camera: { on: false, deviceId: null },
+  mic: { on: true, deviceId: null },
+  sys: { on: true },
 }
 
+const ICON = {
+  screen: '<rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 21h6M12 17v4"/>',
+  camera: '<path d="M15 10l4.5-2.5v9L15 14"/><rect x="2.5" y="6" width="12.5" height="12" rx="2"/>',
+  mic: '<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"/>',
+  sys: '<path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6"/>',
+}
+
+// The source button shows one mini icon per ENABLED input — reads at a glance.
 function renderSource() {
-  ;($('source-label') as HTMLElement).textContent = SOURCE_META[mode].label + (pipOn && mode === 'screen' ? ' + cam' : '')
-  ;($('source-icon') as HTMLElement).innerHTML = SOURCE_META[mode].icon
+  const icons = [
+    cap.screen.on ? ICON.screen : null,
+    cap.camera.on ? ICON.camera : null,
+    cap.mic.on ? ICON.mic : null,
+    cap.sys.on ? ICON.sys : null,
+  ].filter(Boolean)
+  $('source-icons').innerHTML = icons.length
+    ? icons.map((i) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${i}</svg>`).join('')
+    : '<span class="none">nothing selected</span>'
 }
-renderSource()
+
+async function enumerate() {
+  const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [])
+  const label = (d: MediaDeviceInfo, i: number, kind: string) => d.label || `${kind} ${i + 1}`
+  const cams = devices.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: label(d, i, 'Camera') }))
+  const mics = devices.filter((d) => d.kind === 'audioinput').map((d, i) => ({ id: d.deviceId, label: label(d, i, 'Microphone') }))
+  const sources = await window.meetcap.listWindows().catch(() => [])
+  const screens = sources.filter((w) => w.id.startsWith('screen:')).map((w, i) => ({ id: w.id, label: w.name || `Screen ${i + 1}` }))
+  const windows = sources
+    .filter((w) => w.id.startsWith('window:') && w.name)
+    .slice(0, 12)
+    .map((w) => ({ id: w.id, label: w.name.length > 40 ? w.name.slice(0, 40) + '…' : w.name }))
+  return { cams, mics, screens, windows }
+}
 
 $('btn-source').onclick = async () => {
-  const choice = await window.recorderApp.sourceMenu({ mode, pip: pipOn })
-  if (!choice) return
-  if (choice.mode !== undefined) mode = choice.mode as Mode
-  if (choice.pip !== undefined) pipOn = choice.pip
+  const { cams, mics, screens, windows } = await enumerate()
+  // No device → the toggle can't be on.
+  if (cams.length === 0) cap.camera.on = false
+  if (mics.length === 0) cap.mic.on = false
+  const patch = await window.recorderApp.sourceMenu({ state: cap, screens, windows, cams, mics })
+  if (patch) {
+    if (patch.screen?.on !== undefined) cap.screen.on = patch.screen.on
+    if (patch.screen?.sourceId !== undefined) {
+      cap.screen.sourceId = patch.screen.sourceId
+      cap.screen.on = true
+    }
+    if (patch.camera?.on !== undefined) cap.camera.on = patch.camera.on
+    if (patch.camera?.deviceId !== undefined) cap.camera.deviceId = patch.camera.deviceId
+    if (patch.mic?.on !== undefined) cap.mic.on = patch.mic.on
+    if (patch.mic?.deviceId !== undefined) cap.mic.deviceId = patch.mic.deviceId
+    if (patch.sys?.on !== undefined) cap.sys.on = patch.sys.on
+  }
   renderSource()
 }
+renderSource()
 
 // ── recorder + timer ──────────────────────────────────────────────────────────
 const recorder = createRecorder({ filenamePrefix: 'recording' })
@@ -118,11 +148,25 @@ recorder.on('error', () => {
 })
 
 async function startRecording(meeting: MeetingInfo | null) {
+  if (!cap.screen.on && !cap.camera.on && !cap.mic.on && !cap.sys.on) {
+    new Notification('Nothing to record', { body: 'Enable at least one input in the source menu' })
+    return
+  }
   elapsed = 0
   renderTimer()
-  if (mode === 'screen' && pipOn) await window.recorderApp.pip(true)
+  // Camera with screen = floating bubble (the screen capture films it);
+  // camera without screen = the recorded video track itself.
+  const cameraAsBubble = cap.camera.on && cap.screen.on
+  if (cameraAsBubble) await window.recorderApp.pip(true, cap.camera.deviceId)
   try {
-    await recorder.start(meeting, mode ? { video: mode } : {})
+    await recorder.start(meeting, {
+      capture: {
+        screen: cap.screen.on ? { sourceId: cap.screen.sourceId ?? undefined } : false,
+        systemAudio: cap.sys.on,
+        mic: cap.mic.on ? { deviceId: cap.mic.deviceId ?? undefined } : false,
+        camera: cap.camera.on && !cap.screen.on ? { deviceId: cap.camera.deviceId ?? undefined } : false,
+      },
+    })
   } catch (err) {
     void window.recorderApp.pip(false)
     if (err instanceof PermissionDeniedError) {

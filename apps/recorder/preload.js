@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('recorderApp', {
   reveal: (filePath) => ipcRenderer.invoke('recorder-app:reveal', filePath),
   showLibrary: () => ipcRenderer.invoke('recorder-app:show-library'),
   hideBar: () => ipcRenderer.invoke('recorder-app:hide-bar'),
-  pip: (show) => ipcRenderer.invoke('recorder-app:pip', show),
+  pip: (show, deviceId) => ipcRenderer.invoke('recorder-app:pip', show, deviceId),
   sourceMenu: (current) => ipcRenderer.invoke('recorder-app:source-menu', current),
   onToggleRecord: (cb) => ipcRenderer.on('recorder-app:toggle-record', cb),
   onLibraryUpdated: (cb) => ipcRenderer.on('recorder-app:library-updated', cb),

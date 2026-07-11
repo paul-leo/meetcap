@@ -27,16 +27,21 @@
     .btn svg { width: 15px; height: 15px; flex: none; }
     .btn.source { background: rgba(255,255,255,.07); color: #e9ebee; font-weight: 500; }
     .btn.source:hover { background: rgba(255,255,255,.12); }
+    .icon-strip { display: flex; gap: 7px; align-items: center; }
+    .icon-strip svg { width: 15px; height: 15px; }
+    .icon-strip .none { color: #7b828d; font-size: 11.5px; }
     .btn.icon { padding: 0; width: 34px; justify-content: center; }
 
     .rec {
-      -webkit-app-region: no-drag; width: 36px; height: 36px; border-radius: 50%; border: 0;
-      background: #ff453a; cursor: pointer; display: grid; place-items: center; margin: 0 2px;
-      transition: transform .1s, background .12s;
+      -webkit-app-region: no-drag; width: 28px; height: 28px; border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,.35); background: transparent;
+      cursor: pointer; display: grid; place-items: center; margin: 0 4px; padding: 0;
+      transition: border-color .12s;
     }
-    .rec:hover { transform: scale(1.06); }
-    .rec .core { width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: border-radius .15s; }
-    body.recording .rec .core { border-radius: 3px; width: 12px; height: 12px; } /* ● → ■ */
+    .rec:hover { border-color: rgba(255,255,255,.6); }
+    .rec .core { width: 16px; height: 16px; border-radius: 50%; background: #ff453a; transition: all .15s; }
+    .rec:hover .core { background: #ff5c52; }
+    body.recording .rec .core { border-radius: 3.5px; width: 11px; height: 11px; } /* ● → ■ */
 
     .timer { font: 600 13px/1 "SF Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; color: #ff9f98; min-width: 42px; text-align: center; display: none; }
     body.recording .timer { display: block; }
@@ -62,9 +67,8 @@
       <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
     </div>
 
-    <button class="btn source idle-only" id="btn-source" title="Recording source">
-      <svg id="source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 21h6M12 17v4"/></svg>
-      <span id="source-label">Screen</span>
+    <button class="btn source idle-only" id="btn-source" title="Inputs — click to toggle screen / camera / mic / system audio">
+      <span id="source-icons" class="icon-strip"></span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;opacity:.6"><path d="M6 9l6 6 6-6"/></svg>
     </button>
 
