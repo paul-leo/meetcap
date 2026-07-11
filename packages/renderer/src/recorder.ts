@@ -27,6 +27,9 @@ import {
   type CaptureRecorder,
   type RecordingStore,
 } from 'meetcap-capture'
+import { createCameraBubbleTrack, type CameraBubbleOptions, type CompositeHandle } from './composite'
+
+export { createCameraBubbleTrack, type CameraBubbleOptions, type CompositeHandle } from './composite'
 
 export type { RecorderState, RecordingChunk } from 'meetcap-capture'
 
@@ -79,6 +82,14 @@ export interface CaptureSpec {
   mic?: boolean | { deviceId?: string }
   /** Record the camera as the video track when `screen` is off. */
   camera?: boolean | { deviceId?: string }
+  /**
+   * When both `screen` and `camera` are on: composite the camera into the
+   * recorded video as a circular picture-in-picture bubble. Meant for WINDOW
+   * captures, where a floating overlay window isn't part of the captured
+   * pixels. Full-screen captures usually skip this and film an on-screen
+   * overlay instead. Default false (screen track wins, camera unused).
+   */
+  cameraBubble?: boolean | CameraBubbleOptions
 }
 
 /**
@@ -101,6 +112,7 @@ export function resolveCaptureSpec(opts: StartOptions): {
   micDeviceId: string | null
   camera: boolean
   cameraDeviceId: string | null
+  cameraBubble: CameraBubbleOptions | null
 } {
   const c = opts.capture
   const on = (v: boolean | object | undefined, dflt: boolean) => (v === undefined ? dflt : v !== false)
@@ -115,6 +127,7 @@ export function resolveCaptureSpec(opts: StartOptions): {
       micDeviceId: null,
       camera: opts.video === 'camera',
       cameraDeviceId: null,
+      cameraBubble: null,
     }
   }
   return {
@@ -125,6 +138,7 @@ export function resolveCaptureSpec(opts: StartOptions): {
     micDeviceId: idOf(c.mic, 'deviceId'),
     camera: on(c.camera, false),
     cameraDeviceId: idOf(c.camera, 'deviceId'),
+    cameraBubble: c.cameraBubble ? (c.cameraBubble === true ? {} : c.cameraBubble) : null,
   }
 }
 
@@ -181,7 +195,14 @@ async function buildMixedStream(opts: StartOptions): Promise<AcquiredStreams> {
       ...(system && hasSystemAudio ? [system] : []),
     ]
     const audioTracks = audioSources.flatMap((s) => s.getAudioTracks())
-    const videoTrack = screenTrack ?? camera?.getVideoTracks()[0] ?? null
+
+    // screen + camera + cameraBubble → composite the camera into the frame.
+    let compositor: CompositeHandle | null = null
+    const cameraTrack = camera?.getVideoTracks()[0] ?? null
+    if (screenTrack && cameraTrack && spec.cameraBubble) {
+      compositor = await createCameraBubbleTrack(screenTrack, cameraTrack, spec.cameraBubble)
+    }
+    const videoTrack = compositor?.track ?? screenTrack ?? cameraTrack
 
     // Single audio source: raw track, no AudioContext (also avoids recording
     // silence from a suspended context on programmatic starts).
@@ -207,6 +228,7 @@ async function buildMixedStream(opts: StartOptions): Promise<AcquiredStreams> {
       hasSystemAudio,
       videoSource: screenTrack ? 'screen' : videoTrack ? 'camera' : null,
       cleanup: () => {
+        compositor?.stop()
         stopOwned()
         if (ctx) void ctx.close()
       },
