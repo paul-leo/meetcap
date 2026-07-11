@@ -13,7 +13,10 @@ contextBridge.exposeInMainWorld('recorderApp', {
   showLibrary: () => ipcRenderer.invoke('recorder-app:show-library'),
   hideBar: () => ipcRenderer.invoke('recorder-app:hide-bar'),
   pip: (show, deviceId) => ipcRenderer.invoke('recorder-app:pip', show, deviceId),
-  sourceMenu: (current) => ipcRenderer.invoke('recorder-app:source-menu', current),
+  barHeight: (h) => ipcRenderer.invoke('recorder-app:bar-height', h),
+  captureSources: () => ipcRenderer.invoke('recorder-app:capture-sources'),
+  pickScreen: (currentId) => ipcRenderer.invoke('recorder-app:pick-screen', currentId),
+  pickerDone: (result) => ipcRenderer.send('recorder-app:picker-done', result),
   onToggleRecord: (cb) => ipcRenderer.on('recorder-app:toggle-record', cb),
   onLibraryUpdated: (cb) => ipcRenderer.on('recorder-app:library-updated', cb),
 })

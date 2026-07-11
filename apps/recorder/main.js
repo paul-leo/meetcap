@@ -2,7 +2,7 @@
 // (frameless pill, bottom-center, always on top) — not a full window. The
 // recorder lives in the bar's renderer so it survives everything else; the
 // library is an on-demand secondary window. Tray toggles the bar.
-const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain, shell, screen } = require('electron')
+const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain, shell, screen, desktopCapturer } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { initRecorderMain, startDetector } = require('meetcap-main')
@@ -15,11 +15,12 @@ initRecorderMain({ saveDir: SAVE_DIR, revealInFolder: false })
 let bar = null
 let library = null
 let pip = null
+let picker = null
 let tray = null
 let recording = false
 let inMeeting = false
 
-const BAR_W = 420
+const BAR_W = 540
 const BAR_H = 54
 
 // ── windows ───────────────────────────────────────────────────────────────────
@@ -47,6 +48,9 @@ function createBar() {
   })
   bar.setAlwaysOnTop(true, 'floating')
   bar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  // Never record ourselves: exclude the bar from screen captures (the PiP
+  // camera bubble stays capturable on purpose — the screen capture films it).
+  bar.setContentProtection(true)
   bar.loadFile(path.join(__dirname, 'renderer', 'bar.html'))
   // NOTE: transparent windows may never fire ready-to-show on macOS — show
   // on did-finish-load instead.
@@ -191,65 +195,82 @@ ipcMain.handle('recorder-app:show-library', () => showLibrary())
 ipcMain.handle('recorder-app:hide-bar', () => bar?.hide())
 ipcMain.handle('recorder-app:pip', (_e, show, deviceId) => (show ? showPip(deviceId) : hidePip()))
 
-// Source menu — four independent toggles with device submenus, macOS-native.
-// The renderer supplies current state + enumerated devices; one click = one
-// adjustment; the updated state is resolved back.
-ipcMain.handle('recorder-app:source-menu', (e, p) => {
-  return new Promise((resolve) => {
-    let result = null
-    const set = (patch) => () => (result = patch)
-    const radio = (items, currentId, make) =>
-      items.map((it) => ({ label: it.label, type: 'radio', checked: currentId === it.id, click: set(make(it.id)) }))
+// Popovers render inside the bar window and open upward — the renderer asks
+// for more height; keep the BOTTOM edge anchored so the bar itself never moves.
+ipcMain.handle('recorder-app:bar-height', (_e, h) => {
+  if (!bar || bar.isDestroyed()) return
+  const b = bar.getBounds()
+  const height = Math.max(BAR_H, Math.min(Math.round(h), 480))
+  bar.setBounds({ x: b.x, y: b.y + b.height - height, width: b.width, height })
+})
 
-    const screenSources = radio(p.screens, p.state.screen.sourceId, (id) => ({ screen: { sourceId: id } }))
-    const windowSources = radio(p.windows, p.state.screen.sourceId, (id) => ({ screen: { sourceId: id } }))
-    const menu = Menu.buildFromTemplate([
-      {
-        label: 'Screen',
-        type: 'checkbox',
-        checked: p.state.screen.on,
-        click: set({ screen: { on: !p.state.screen.on } }),
+// Live thumbnails for the visual screen/window picker. listWindows() in
+// meetcap-main deliberately fetches 1×1 thumbnails (detection only) — the
+// picker needs real previews, so this is app-level.
+const OWN_WINDOW_TITLES = new Set(['meetcap Recorder', 'Recordings', 'Choose what to share'])
+ipcMain.handle('recorder-app:capture-sources', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 360, height: 225 },
+    fetchWindowIcons: true,
+  })
+  return sources
+    .filter((s) => s.id.startsWith('screen:') || (s.name && !OWN_WINDOW_TITLES.has(s.name)))
+    .map((s, i) => ({
+      id: s.id,
+      kind: s.id.startsWith('screen:') ? 'screen' : 'window',
+      name: s.name || (s.id.startsWith('screen:') ? `Screen ${i + 1}` : 'Untitled window'),
+      thumbnail: s.thumbnail && !s.thumbnail.isEmpty() ? s.thumbnail.toDataURL() : null,
+      appIcon: s.appIcon && !s.appIcon.isEmpty() ? s.appIcon.toDataURL() : null,
+    }))
+})
+
+// The visual picker — a frameless modal centered on the bar's display
+// (Screens / Windows tabs with thumbnails). Resolves to {sourceId, label}
+// or null on cancel/close.
+ipcMain.handle('recorder-app:pick-screen', (_e, currentId) => {
+  return new Promise((resolve) => {
+    if (picker && !picker.isDestroyed()) {
+      picker.focus()
+      resolve(null)
+      return
+    }
+    const disp = bar && !bar.isDestroyed() ? screen.getDisplayMatching(bar.getBounds()) : screen.getPrimaryDisplay()
+    const W = 760
+    const H = 540
+    picker = new BrowserWindow({
+      width: W,
+      height: H,
+      x: disp.workArea.x + Math.round((disp.workArea.width - W) / 2),
+      y: disp.workArea.y + Math.round((disp.workArea.height - H) / 2),
+      frame: false,
+      transparent: true,
+      resizable: false,
+      hasShadow: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      show: false,
+      webPreferences: {
+        sandbox: false,
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
       },
-      {
-        label: '    Source',
-        enabled: p.state.screen.on,
-        submenu: [
-          ...screenSources,
-          ...(windowSources.length ? [{ type: 'separator' }, { label: 'Windows', enabled: false }, ...windowSources] : []),
-        ],
-      },
-      { type: 'separator' },
-      {
-        label: 'Camera',
-        type: 'checkbox',
-        checked: p.state.camera.on,
-        enabled: p.cams.length > 0,
-        click: set({ camera: { on: !p.state.camera.on } }),
-      },
-      ...(p.cams.length > 1
-        ? [{ label: '    Device', enabled: p.state.camera.on, submenu: radio(p.cams, p.state.camera.deviceId ?? p.cams[0].id, (id) => ({ camera: { deviceId: id } })) }]
-        : []),
-      {
-        label: 'Microphone',
-        type: 'checkbox',
-        checked: p.state.mic.on,
-        enabled: p.mics.length > 0,
-        click: set({ mic: { on: !p.state.mic.on } }),
-      },
-      ...(p.mics.length > 1
-        ? [{ label: '    Device', enabled: p.state.mic.on, submenu: radio(p.mics, p.state.mic.deviceId ?? p.mics[0].id, (id) => ({ mic: { deviceId: id } })) }]
-        : []),
-      {
-        label: 'System audio',
-        type: 'checkbox',
-        checked: p.state.sys.on,
-        click: set({ sys: { on: !p.state.sys.on } }),
-      },
-    ])
-    menu.popup({
-      window: BrowserWindow.fromWebContents(e.sender),
-      callback: () => resolve(result),
     })
+    picker.setAlwaysOnTop(true, 'floating')
+    let result = null
+    const onDone = (_ev, r) => {
+      result = r
+      if (picker && !picker.isDestroyed()) picker.close()
+    }
+    ipcMain.once('recorder-app:picker-done', onDone)
+    picker.on('closed', () => {
+      ipcMain.removeListener('recorder-app:picker-done', onDone)
+      picker = null
+      resolve(result)
+    })
+    picker.loadFile(path.join(__dirname, 'renderer', 'picker.html'), currentId ? { query: { current: currentId } } : undefined)
+    picker.webContents.once('did-finish-load', () => picker && picker.show())
   })
 })
 
