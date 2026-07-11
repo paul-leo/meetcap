@@ -23,6 +23,9 @@
     .perm-chips { display: flex; gap: 6px; -webkit-app-region: no-drag; }
     .chip { font-size: 10.5px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
     .chip.bad { color: #ff8f88; border-color: #4a2320; background: #2a1715; cursor: pointer; }
+    .chip.toggle { cursor: pointer; -webkit-app-region: no-drag; transition: all .12s; }
+    .chip.toggle:hover { border-color: #333a46; color: var(--text); }
+    .chip.toggle.on { color: var(--text); border-color: var(--accent); background: rgba(76,141,255,.12); }
 
     /* meeting banner */
     #banner { display: none; align-items: center; gap: 10px; background: linear-gradient(120deg, #14321f, #12251a); border: 1px solid #1f5a37; border-radius: 14px; padding: 12px 14px; }

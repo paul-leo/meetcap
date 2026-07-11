@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('recorderApp', {
   reportMeeting: (active) => ipcRenderer.send('recorder-app:meeting', active),
   library: () => ipcRenderer.invoke('recorder-app:library'),
   openFolder: () => ipcRenderer.invoke('recorder-app:open-folder'),
+  pip: (show) => ipcRenderer.invoke('recorder-app:pip', show),
 })

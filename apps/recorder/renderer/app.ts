@@ -30,6 +30,7 @@ declare global {
       reportMeeting(active: boolean): void
       library(): Promise<Array<{ filePath: string; name: string; size: number; mtimeMs: number }>>
       openFolder(): Promise<void>
+      pip(show: boolean): Promise<void>
     }
   }
 }
@@ -47,8 +48,22 @@ const HINTS: Record<Mode, string[]> = {
   camera: ['Camera', 'Microphone'],
 }
 
+let pipOn = false
+
 function renderHint() {
-  $('capture-hint').innerHTML = HINTS[mode].map((h) => `<span class="chip">${h}</span>`).join('')
+  const chips = HINTS[mode].map((h) => `<span class="chip">${h}</span>`)
+  $('capture-hint').innerHTML = chips.join('')
+  if (mode === 'screen') {
+    const t = document.createElement('span')
+    t.className = 'chip toggle' + (pipOn ? ' on' : '')
+    t.textContent = pipOn ? '● Camera bubble' : '○ Camera bubble'
+    t.title = 'Show your camera in a floating bubble — the screen recording films it'
+    t.onclick = () => {
+      pipOn = !pipOn
+      renderHint()
+    }
+    $('capture-hint').appendChild(t)
+  }
 }
 
 for (const el of Array.from(document.querySelectorAll<HTMLElement>('.mode'))) {
@@ -118,6 +133,7 @@ recorder.on('statechange', (s) => {
     stopTick()
   } else {
     stopTick()
+    void window.recorderApp.pip(false) // recording over → bubble goes away
   }
 })
 
@@ -144,9 +160,11 @@ async function startRecording(meeting: MeetingInfo | null) {
   elapsed = 0
   renderTimer()
   status('')
+  if (mode === 'screen' && pipOn) await window.recorderApp.pip(true)
   try {
     await recorder.start(meeting, mode ? { video: mode } : {})
   } catch (err) {
+    void window.recorderApp.pip(false)
     if (err instanceof PermissionDeniedError) {
       status(`Permission needed: ${err.denied.join(', ')} — opening System Settings`)
       for (const pane of err.denied) void openPrivacySettings(pane)

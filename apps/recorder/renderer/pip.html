@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Camera</title>
+  <style>
+    /* A frameless, transparent, always-on-top camera bubble. The screen
+       capture films it as-is — zero compositing (the Loom approach). */
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    .bubble {
+      position: relative; width: 100%; height: 100%; border-radius: 50%;
+      overflow: hidden; background: #000; -webkit-app-region: drag;
+      box-shadow: 0 6px 24px rgba(0,0,0,.45); border: 2.5px solid rgba(255,255,255,.85);
+      box-sizing: border-box;
+    }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .close {
+      -webkit-app-region: no-drag; position: absolute; top: 8px; right: 8px;
+      width: 22px; height: 22px; border-radius: 50%; border: 0; cursor: pointer;
+      background: rgba(0,0,0,.55); color: #fff; font-size: 12px; line-height: 1;
+      display: grid; place-items: center; opacity: 0; transition: opacity .15s;
+    }
+    .bubble:hover .close { opacity: 1; }
+    .err { position: absolute; inset: 0; display: grid; place-items: center;
+      color: #ff8f88; font: 11px -apple-system, sans-serif; text-align: center; padding: 12px; }
+  </style>
+</head>
+<body>
+  <div class="bubble">
+    <video id="v" autoplay muted playsinline></video>
+    <button class="close" id="close" title="Hide camera">✕</button>
+  </div>
+  <script>
+    const v = document.getElementById('v')
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 640 }, audio: false })
+      .then((stream) => { v.srcObject = stream })
+      .catch((e) => {
+        const d = document.createElement('div')
+        d.className = 'err'
+        d.textContent = 'Camera unavailable: ' + (e && e.name ? e.name : e)
+        document.querySelector('.bubble').appendChild(d)
+      })
+    document.getElementById('close').onclick = () => window.close()
+    // Release the camera the moment the window goes away.
+    window.addEventListener('beforeunload', () => {
+      const s = v.srcObject
+      if (s) s.getTracks().forEach((t) => t.stop())
+    })
+  </script>
+</body>
+</html>

@@ -31,6 +31,39 @@ ipcMain.handle('recorder-app:open-folder', () => {
   void shell.openPath(SAVE_DIR)
 })
 
+// Camera PiP bubble — a frameless always-on-top preview the screen capture
+// simply films (zero compositing, the Loom approach). Closed automatically
+// when recording stops.
+let pip = null
+function showPip() {
+  if (pip && !pip.isDestroyed()) return
+  const { screen } = require('electron')
+  const { workArea } = screen.getPrimaryDisplay()
+  const SIZE = 180
+  pip = new BrowserWindow({
+    width: SIZE,
+    height: SIZE,
+    x: workArea.x + 24,
+    y: workArea.y + workArea.height - SIZE - 24,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    focusable: false,
+    alwaysOnTop: true,
+  })
+  pip.setAlwaysOnTop(true, 'screen-saver') // stay above full-screen apps
+  pip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  pip.loadFile(path.join(__dirname, 'renderer', 'pip.html'))
+  pip.on('closed', () => (pip = null))
+}
+function hidePip() {
+  if (pip && !pip.isDestroyed()) pip.close()
+  pip = null
+}
+ipcMain.handle('recorder-app:pip', (_e, show) => (show ? showPip() : hidePip()))
+
 let panel = null
 let tray = null
 let recording = false
