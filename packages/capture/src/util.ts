@@ -109,6 +109,7 @@ export function buildFilename(
   prefix = 'meetcap',
 ): string {
   const stamp = date.toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  const app = (meeting?.app || 'meeting').replace(/\s+/g, '-')
-  return `${prefix}-${app}-${stamp}.webm`
+  // No meeting → no app segment: "rec-<stamp>.webm", not "rec-meeting-<stamp>".
+  const app = meeting?.app ? `-${meeting.app.replace(/\s+/g, '-')}` : ''
+  return `${prefix}${app}-${stamp}.webm`
 }

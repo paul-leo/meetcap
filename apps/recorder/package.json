@@ -5,10 +5,10 @@
   "description": "meetcap Recorder — menu-bar screen/meeting recorder: screen + system audio + mic (+ camera), meeting auto-detection, crash-safe local library. The desktop enhancer for meetcap-web pages (agent mode, Phase 3).",
   "main": "main.js",
   "scripts": {
-    "build": "esbuild renderer/app.ts --bundle --outfile=renderer/bundle.js --platform=browser --format=iife --sourcemap --define:__HARNESS_ENABLED__=true",
+    "build": "esbuild renderer/bar.ts renderer/library.ts --bundle --outdir=renderer --platform=browser --format=iife --sourcemap --define:__HARNESS_ENABLED__=true",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
-    "build:dist": "esbuild renderer/app.ts --bundle --outfile=renderer/bundle.js --platform=browser --format=iife --define:__HARNESS_ENABLED__=false"
+    "build:dist": "esbuild renderer/bar.ts renderer/library.ts --bundle --outdir=renderer --platform=browser --format=iife --define:__HARNESS_ENABLED__=false"
   },
   "dependencies": {
     "meetcap-core": "workspace:*",

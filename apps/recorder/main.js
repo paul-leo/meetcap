@@ -1,8 +1,8 @@
-// meetcap Recorder — main process. Menu-bar (tray) app: the panel window is
-// summoned from the tray, recording runs in the renderer via meetcap, files
-// land in ~/Movies/meetcap Recorder. Meeting detection runs process-only
-// (zero permissions) and badges the tray while a meeting is live.
-const { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, shell } = require('electron')
+// meetcap Recorder — main process. The primary UI is a floating control BAR
+// (frameless pill, bottom-center, always on top) — not a full window. The
+// recorder lives in the bar's renderer so it survives everything else; the
+// library is an on-demand secondary window. Tray toggles the bar.
+const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain, shell, screen } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { initRecorderMain, startDetector } = require('meetcap-main')
@@ -12,32 +12,78 @@ const SAVE_DIR = path.join(app.getPath('videos'), 'meetcap Recorder')
 // MUST run before app.whenReady — injects the loopback Chromium flags.
 initRecorderMain({ saveDir: SAVE_DIR, revealInFolder: false })
 
-// App-level IPC: the library view (meetcap's bridge covers read/delete/exists;
-// enumerating finished recordings is the app's own concern).
-ipcMain.handle('recorder-app:library', () => {
-  if (!fs.existsSync(SAVE_DIR)) return []
-  return fs
-    .readdirSync(SAVE_DIR)
-    .filter((f) => f.endsWith('.webm'))
-    .map((f) => {
-      const p = path.join(SAVE_DIR, f)
-      const st = fs.statSync(p)
-      return { filePath: p, name: f, size: st.size, mtimeMs: st.mtimeMs }
-    })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)
-})
-ipcMain.handle('recorder-app:open-folder', () => {
-  fs.mkdirSync(SAVE_DIR, { recursive: true })
-  void shell.openPath(SAVE_DIR)
-})
-
-// Camera PiP bubble — a frameless always-on-top preview the screen capture
-// simply films (zero compositing, the Loom approach). Closed automatically
-// when recording stops.
+let bar = null
+let library = null
 let pip = null
+let tray = null
+let recording = false
+let inMeeting = false
+
+const BAR_W = 420
+const BAR_H = 54
+
+// ── windows ───────────────────────────────────────────────────────────────────
+
+function createBar() {
+  const { workArea } = screen.getPrimaryDisplay()
+  bar = new BrowserWindow({
+    width: BAR_W,
+    height: BAR_H,
+    x: workArea.x + Math.round((workArea.width - BAR_W) / 2),
+    y: workArea.y + workArea.height - BAR_H - 28,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  })
+  bar.setAlwaysOnTop(true, 'floating')
+  bar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  bar.loadFile(path.join(__dirname, 'renderer', 'bar.html'))
+  // NOTE: transparent windows may never fire ready-to-show on macOS — show
+  // on did-finish-load instead.
+  bar.webContents.once('did-finish-load', () => bar.show())
+  bar.on('closed', () => (bar = null))
+}
+
+function toggleBar() {
+  if (!bar) return createBar()
+  if (bar.isVisible()) bar.hide()
+  else bar.show()
+}
+
+function showLibrary() {
+  if (library && !library.isDestroyed()) {
+    library.show()
+    library.focus()
+    return
+  }
+  library = new BrowserWindow({
+    width: 420,
+    height: 520,
+    title: 'Recordings',
+    webPreferences: {
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  })
+  library.loadFile(path.join(__dirname, 'renderer', 'library.html'))
+  library.on('closed', () => (library = null))
+}
+
+// Camera PiP bubble — zero compositing: the screen capture just films it.
 function showPip() {
   if (pip && !pip.isDestroyed()) return
-  const { screen } = require('electron')
   const { workArea } = screen.getPrimaryDisplay()
   const SIZE = 180
   pip = new BrowserWindow({
@@ -53,7 +99,7 @@ function showPip() {
     focusable: false,
     alwaysOnTop: true,
   })
-  pip.setAlwaysOnTop(true, 'screen-saver') // stay above full-screen apps
+  pip.setAlwaysOnTop(true, 'screen-saver')
   pip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   pip.loadFile(path.join(__dirname, 'renderer', 'pip.html'))
   pip.on('closed', () => (pip = null))
@@ -62,14 +108,9 @@ function hidePip() {
   if (pip && !pip.isDestroyed()) pip.close()
   pip = null
 }
-ipcMain.handle('recorder-app:pip', (_e, show) => (show ? showPip() : hidePip()))
 
-let panel = null
-let tray = null
-let recording = false
-let inMeeting = false
+// ── tray ──────────────────────────────────────────────────────────────────────
 
-// 16x16 template circle, filled while recording (macOS tints template images).
 function trayIcon(active) {
   const size = 16
   const c = active ? 0xff : 0x00
@@ -93,40 +134,6 @@ function trayIcon(active) {
   return img
 }
 
-function createPanel() {
-  panel = new BrowserWindow({
-    width: 460,
-    height: 640,
-    show: false,
-    resizable: true,
-    fullscreenable: false,
-    title: 'meetcap Recorder',
-    webPreferences: {
-      sandbox: false,
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  })
-  panel.loadFile(path.join(__dirname, 'renderer', 'index.html'))
-  // Menu-bar app semantics: closing hides, quit lives in the tray menu.
-  panel.on('close', (e) => {
-    if (!app.isQuitting) {
-      e.preventDefault()
-      panel.hide()
-    }
-  })
-}
-
-function togglePanel() {
-  if (!panel) createPanel()
-  if (panel.isVisible()) panel.hide()
-  else {
-    panel.show()
-    panel.focus()
-  }
-}
-
 function refreshTray() {
   tray.setImage(trayIcon(recording))
   tray.setToolTip(
@@ -136,7 +143,9 @@ function refreshTray() {
     Menu.buildFromTemplate([
       { label: recording ? 'Recording…' : inMeeting ? 'Meeting detected' : 'Idle', enabled: false },
       { type: 'separator' },
-      { label: 'Open panel', click: togglePanel },
+      { label: 'Show / hide bar', accelerator: 'CommandOrControl+Shift+M', click: toggleBar },
+      { label: 'Recordings…', click: showLibrary },
+      { type: 'separator' },
       {
         label: 'Quit',
         click: () => {
@@ -148,27 +157,80 @@ function refreshTray() {
   )
 }
 
-// Renderer reports recording state so the tray reflects it.
+// ── IPC ───────────────────────────────────────────────────────────────────────
+
 ipcMain.on('recorder-app:state', (_e, s) => {
   recording = s === 'recording' || s === 'paused'
   refreshTray()
+  if (!recording && library && !library.isDestroyed()) library.webContents.send('recorder-app:library-updated')
 })
 ipcMain.on('recorder-app:meeting', (_e, active) => {
   inMeeting = active
   refreshTray()
+  if (active && bar && !bar.isVisible()) bar.show() // surface the bar when a meeting appears
 })
+
+ipcMain.handle('recorder-app:library', () => {
+  if (!fs.existsSync(SAVE_DIR)) return []
+  return fs
+    .readdirSync(SAVE_DIR)
+    .filter((f) => f.endsWith('.webm'))
+    .map((f) => {
+      const p = path.join(SAVE_DIR, f)
+      const st = fs.statSync(p)
+      return { filePath: p, name: f, size: st.size, mtimeMs: st.mtimeMs }
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+})
+ipcMain.handle('recorder-app:open-folder', () => {
+  fs.mkdirSync(SAVE_DIR, { recursive: true })
+  void shell.openPath(SAVE_DIR)
+})
+ipcMain.handle('recorder-app:reveal', (_e, filePath) => shell.showItemInFolder(filePath))
+ipcMain.handle('recorder-app:show-library', () => showLibrary())
+ipcMain.handle('recorder-app:hide-bar', () => bar?.hide())
+ipcMain.handle('recorder-app:pip', (_e, show) => (show ? showPip() : hidePip()))
+
+// Source menu — a native popup anchored to the bar (simple + macOS-native).
+ipcMain.handle('recorder-app:source-menu', (e, current) => {
+  return new Promise((resolve) => {
+    let result = null
+    const pick = (mode) => () => (result = { mode })
+    const menu = Menu.buildFromTemplate([
+      { label: 'Screen + audio', type: 'radio', checked: current.mode === 'screen', click: pick('screen') },
+      { label: 'Audio only', type: 'radio', checked: current.mode === '', click: pick('') },
+      { label: 'Camera + audio', type: 'radio', checked: current.mode === 'camera', click: pick('camera') },
+      { type: 'separator' },
+      {
+        label: 'Camera bubble',
+        type: 'checkbox',
+        checked: current.pip,
+        click: () => (result = { pip: !current.pip }),
+      },
+    ])
+    menu.popup({
+      window: BrowserWindow.fromWebContents(e.sender),
+      callback: () => resolve(result),
+    })
+  })
+})
+
+// ── lifecycle ─────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   tray = new Tray(trayIcon(false))
-  tray.on('click', togglePanel)
+  tray.on('click', toggleBar)
   refreshTray()
-  createPanel()
-  panel.once('ready-to-show', () => panel.show()) // first launch: show the panel
-  // Process-only detection: zero extra permissions; renderer shows the banner.
+  createBar()
+  // Process-only detection: zero extra permissions; the bar shows the chip.
   startDetector({ intervalMs: 3000, endGraceMs: 15_000 })
-  if (app.dock) app.dock.hide() // menu-bar app: no Dock icon
+  // Global shortcuts: toggle recording / toggle bar.
+  globalShortcut.register('CommandOrControl+Shift+R', () => bar?.webContents.send('recorder-app:toggle-record'))
+  globalShortcut.register('CommandOrControl+Shift+M', toggleBar)
+  if (app.dock) app.dock.hide()
 })
 
+app.on('will-quit', () => globalShortcut.unregisterAll())
 app.on('window-all-closed', () => {
   // keep running in the tray
 })

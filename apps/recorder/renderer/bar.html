@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>meetcap Recorder</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { font: 12.5px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: #e9ebee; }
+
+    .bar {
+      height: 48px; margin: 3px; border-radius: 999px;
+      background: rgba(28, 30, 36, .96); border: 1px solid rgba(255,255,255,.09);
+      box-shadow: 0 8px 28px rgba(0,0,0,.5);
+      display: flex; align-items: center; gap: 4px; padding: 0 10px 0 6px;
+    }
+    .drag { -webkit-app-region: drag; color: #5b626e; padding: 0 4px; cursor: grab; display: grid; place-items: center; }
+    .drag svg { width: 13px; height: 13px; }
+
+    .btn {
+      -webkit-app-region: no-drag; border: 0; background: transparent; color: #aeb5c0;
+      height: 34px; border-radius: 999px; cursor: pointer; display: flex; align-items: center;
+      gap: 6px; padding: 0 10px; font: inherit; transition: background .12s, color .12s;
+    }
+    .btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .btn svg { width: 15px; height: 15px; flex: none; }
+    .btn.source { background: rgba(255,255,255,.07); color: #e9ebee; font-weight: 500; }
+    .btn.source:hover { background: rgba(255,255,255,.12); }
+    .btn.icon { padding: 0; width: 34px; justify-content: center; }
+
+    .rec {
+      -webkit-app-region: no-drag; width: 36px; height: 36px; border-radius: 50%; border: 0;
+      background: #ff453a; cursor: pointer; display: grid; place-items: center; margin: 0 2px;
+      transition: transform .1s, background .12s;
+    }
+    .rec:hover { transform: scale(1.06); }
+    .rec .core { width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: border-radius .15s; }
+    body.recording .rec .core { border-radius: 3px; width: 12px; height: 12px; } /* ● → ■ */
+
+    .timer { font: 600 13px/1 "SF Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; color: #ff9f98; min-width: 42px; text-align: center; display: none; }
+    body.recording .timer { display: block; }
+    body:not(.recording) .idle-only { display: flex; }
+    body.recording .idle-only { display: none; }
+    body:not(.recording) .rec-only { display: none; }
+    body.recording .rec-only { display: flex; }
+
+    .meet-chip {
+      -webkit-app-region: no-drag; display: none; align-items: center; gap: 5px;
+      background: rgba(50,215,75,.14); border: 1px solid rgba(50,215,75,.35); color: #7ce49a;
+      border-radius: 999px; padding: 0 10px; height: 30px; font-size: 11.5px; font-weight: 500; cursor: pointer;
+    }
+    .meet-chip.show { display: flex; }
+    .meet-chip .g-dot { width: 6px; height: 6px; border-radius: 50%; background: #32d74b; }
+
+    .sep { width: 1px; height: 18px; background: rgba(255,255,255,.1); margin: 0 2px; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="drag" title="Drag to move">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+    </div>
+
+    <button class="btn source idle-only" id="btn-source" title="Recording source">
+      <svg id="source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M9 21h6M12 17v4"/></svg>
+      <span id="source-label">Screen</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;opacity:.6"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+
+    <span class="meet-chip" id="meet-chip" title="Record this meeting"><span class="g-dot"></span><span id="meet-app">Zoom</span></span>
+
+    <div style="flex:1"></div>
+
+    <span class="timer" id="timer">00:00</span>
+    <button class="btn icon rec-only" id="btn-pause" title="Pause">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5" width="3.2" height="14" rx="1"/><rect x="13.8" y="5" width="3.2" height="14" rx="1"/></svg>
+    </button>
+    <button class="btn icon rec-only" id="btn-resume" title="Resume" style="display:none">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+    </button>
+
+    <button class="rec" id="btn-rec" title="Start / stop (⌘⇧R)"><span class="core"></span></button>
+
+    <div class="sep idle-only"></div>
+    <button class="btn icon idle-only" id="btn-library" title="Recordings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    </button>
+    <button class="btn icon idle-only" id="btn-hide" title="Hide (⌘⇧M to bring back)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <script src="bar.js"></script>
+</body>
+</html>
