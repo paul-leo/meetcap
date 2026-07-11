@@ -1,0 +1,80 @@
+name: Desktop
+
+# Builds the meetcap Recorder desktop client (macOS dmg + zip, both arches).
+#
+# How to ship:
+#   - Tag a commit `recorder-vX.Y.Z` (match apps/recorder package.json version)
+#     and push the tag → builds and publishes a GitHub Release with the
+#     artifacts attached.
+#   - Or run manually (workflow_dispatch) → builds and uploads the artifacts
+#     to the workflow run only (no release).
+#
+# Builds are unsigned (no Apple Developer identity in CI): first launch needs
+# right-click → Open, or `xattr -dr com.apple.quarantine`.
+
+on:
+    push:
+        tags:
+            - 'recorder-v*'
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    mac:
+        name: macOS build
+        runs-on: macos-14
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+              with:
+                  version: 9.15.0
+                  run_install: false
+
+            - name: Setup Node.js
+              uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+              with:
+                  node-version: '22'
+                  cache: 'pnpm'
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build workspace packages
+              run: pnpm build
+
+            - name: Build renderer bundles
+              working-directory: apps/recorder
+              run: pnpm build:dist
+
+            - name: Package (dmg + zip, arm64 + x64)
+              working-directory: apps/recorder
+              run: pnpm exec electron-builder --mac --arm64 --x64
+              env:
+                  # unsigned build; skip the implicit signing attempt entirely
+                  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+              with:
+                  name: meetcap-recorder-mac
+                  path: |
+                      apps/recorder/release/*.dmg
+                      apps/recorder/release/*.zip
+                  if-no-files-found: error
+
+            - name: Create GitHub Release
+              if: startsWith(github.ref, 'refs/tags/recorder-v')
+              uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+              with:
+                  files: |
+                      apps/recorder/release/*.dmg
+                      apps/recorder/release/*.zip
+                  generate_release_notes: true
+                  draft: false

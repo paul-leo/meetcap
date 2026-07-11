@@ -27,6 +27,9 @@ import {
   type CaptureRecorder,
   type RecordingStore,
 } from 'meetcap-capture'
+import { createCameraBubbleTrack, type CameraBubbleOptions, type CompositeHandle } from './composite'
+
+export { createCameraBubbleTrack, type CameraBubbleOptions, type CompositeHandle } from './composite'
 
 export type { RecorderState, RecordingChunk } from 'meetcap-capture'
 
@@ -59,6 +62,34 @@ export interface StartOptions {
    * Omit for audio-only (the default, previous behavior).
    */
   video?: 'screen' | 'camera'
+  /**
+   * Composable capture spec — every input is an independent toggle, so any
+   * combination works (screen + camera-as-bubble apps toggle camera off here
+   * and film their own overlay; podcast apps run mic-only; etc.). Wins over
+   * `video` when both are given. Defaults reproduce the classic behavior:
+   * `{ screen: <video==='screen'>, systemAudio: true, mic: true, camera: <video==='camera'> }`.
+   */
+  capture?: CaptureSpec
+}
+
+/** Independent input toggles; `true` = on with the default device. */
+export interface CaptureSpec {
+  /** Record the screen (or a specific screen/window from listWindows()). */
+  screen?: boolean | { sourceId?: string }
+  /** Capture the other side / system audio (loopback). Default true. */
+  systemAudio?: boolean
+  /** Capture the microphone (optionally a specific input device). Default true. */
+  mic?: boolean | { deviceId?: string }
+  /** Record the camera as the video track when `screen` is off. */
+  camera?: boolean | { deviceId?: string }
+  /**
+   * When both `screen` and `camera` are on: composite the camera into the
+   * recorded video as a circular picture-in-picture bubble. Meant for WINDOW
+   * captures, where a floating overlay window isn't part of the captured
+   * pixels. Full-screen captures usually skip this and film an on-screen
+   * overlay instead. Default false (screen track wins, camera unused).
+   */
+  cameraBubble?: boolean | CameraBubbleOptions
 }
 
 /**
@@ -72,60 +103,139 @@ export function isBridgeAvailable(): boolean {
   return typeof window !== 'undefined' && typeof (window as { meetcap?: unknown }).meetcap === 'object'
 }
 
-async function buildMixedStream(video?: 'screen' | 'camera'): Promise<AcquiredStreams> {
-  if (!isBridgeAvailable()) throw new BridgeUnavailableError()
-  const mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-
-  // Camera before the display capture, so its native prompt isn't buried
-  // behind the loopback flow; release the mic if it fails.
-  let camera: MediaStream | null = null
-  if (video === 'camera') {
-    try {
-      camera = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-    } catch (err) {
-      mic.getTracks().forEach((t) => t.stop())
-      throw err
+/** Normalize StartOptions (legacy `video` or composable `capture`) into one plan. */
+export function resolveCaptureSpec(opts: StartOptions): {
+  screen: boolean
+  screenSourceId: string | null
+  systemAudio: boolean
+  mic: boolean
+  micDeviceId: string | null
+  camera: boolean
+  cameraDeviceId: string | null
+  cameraBubble: CameraBubbleOptions | null
+} {
+  const c = opts.capture
+  const on = (v: boolean | object | undefined, dflt: boolean) => (v === undefined ? dflt : v !== false)
+  const idOf = (v: boolean | { sourceId?: string } | { deviceId?: string } | undefined, key: 'sourceId' | 'deviceId') =>
+    (typeof v === 'object' && v !== null && (v as Record<string, string | undefined>)[key]) || null
+  if (!c) {
+    return {
+      screen: opts.video === 'screen',
+      screenSourceId: null,
+      systemAudio: true,
+      mic: true,
+      micDeviceId: null,
+      camera: opts.video === 'camera',
+      cameraDeviceId: null,
+      cameraBubble: null,
     }
   }
-
-  await window.meetcap.enableLoopbackAudio()
-  let system: MediaStream
-  try {
-    system = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-  } catch (err) {
-    mic.getTracks().forEach((t) => t.stop())
-    camera?.getTracks().forEach((t) => t.stop())
-    throw err
-  } finally {
-    await window.meetcap.disableLoopbackAudio()
-  }
-  // The display capture always carries a screen video track (it's how the
-  // loopback audio is granted). Keep it when recording the screen; otherwise
-  // stop it immediately so no video is captured that wasn't asked for.
-  const screenTrack = video === 'screen' ? (system.getVideoTracks()[0] ?? null) : null
-  if (!screenTrack) system.getVideoTracks().forEach((t) => t.stop())
-  const hasSystemAudio = system.getAudioTracks().length > 0
-
-  const ctx = new AudioContext()
-  const dest = ctx.createMediaStreamDestination()
-  ctx.createMediaStreamSource(mic).connect(dest)
-  if (hasSystemAudio) ctx.createMediaStreamSource(system).connect(dest)
-
-  const videoTrack = screenTrack ?? camera?.getVideoTracks()[0] ?? null
-  const mixed = videoTrack
-    ? new MediaStream([...dest.stream.getAudioTracks(), videoTrack])
-    : dest.stream
-
   return {
-    mixed,
-    hasSystemAudio,
-    videoSource: videoTrack ? (video ?? null) : null,
-    cleanup: () => {
-      mic.getTracks().forEach((t) => t.stop())
-      system.getTracks().forEach((t) => t.stop())
-      camera?.getTracks().forEach((t) => t.stop())
-      void ctx.close()
-    },
+    screen: on(c.screen, false),
+    screenSourceId: idOf(c.screen, 'sourceId'),
+    systemAudio: c.systemAudio !== false,
+    mic: on(c.mic, true),
+    micDeviceId: idOf(c.mic, 'deviceId'),
+    camera: on(c.camera, false),
+    cameraDeviceId: idOf(c.camera, 'deviceId'),
+    cameraBubble: c.cameraBubble ? (c.cameraBubble === true ? {} : c.cameraBubble) : null,
+  }
+}
+
+async function buildMixedStream(opts: StartOptions): Promise<AcquiredStreams> {
+  if (!isBridgeAvailable()) throw new BridgeUnavailableError()
+  const spec = resolveCaptureSpec(opts)
+  const owned: MediaStream[] = []
+  const stopOwned = () => owned.forEach((s) => s.getTracks().forEach((t) => t.stop()))
+
+  try {
+    let mic: MediaStream | null = null
+    if (spec.mic) {
+      mic = await navigator.mediaDevices.getUserMedia({
+        audio: spec.micDeviceId ? { deviceId: { exact: spec.micDeviceId } } : true,
+        video: false,
+      })
+      owned.push(mic)
+    }
+    // Camera before the display capture, so its native prompt isn't buried
+    // behind the loopback flow.
+    let camera: MediaStream | null = null
+    if (spec.camera) {
+      camera = await navigator.mediaDevices.getUserMedia({
+        video: spec.cameraDeviceId ? { deviceId: { exact: spec.cameraDeviceId } } : true,
+        audio: false,
+      })
+      owned.push(camera)
+    }
+
+    // The display capture serves double duty: the screen video track AND the
+    // loopback system audio. It runs when either is wanted.
+    let system: MediaStream | null = null
+    if (spec.screen || spec.systemAudio) {
+      await window.meetcap.setLoopbackSource(spec.screenSourceId)
+      await window.meetcap.enableLoopbackAudio()
+      try {
+        system = await navigator.mediaDevices.getDisplayMedia({
+          video: true, // the handler always needs a video source to grant loopback
+          audio: spec.systemAudio,
+        })
+        owned.push(system)
+      } finally {
+        await window.meetcap.disableLoopbackAudio()
+      }
+      // Keep the screen track only when the screen is being recorded.
+      if (!spec.screen) system.getVideoTracks().forEach((t) => t.stop())
+    }
+
+    const screenTrack = spec.screen ? (system?.getVideoTracks()[0] ?? null) : null
+    const hasSystemAudio = spec.systemAudio && (system?.getAudioTracks().length ?? 0) > 0
+
+    const audioSources = [
+      ...(mic ? [mic] : []),
+      ...(system && hasSystemAudio ? [system] : []),
+    ]
+    const audioTracks = audioSources.flatMap((s) => s.getAudioTracks())
+
+    // screen + camera + cameraBubble → composite the camera into the frame.
+    let compositor: CompositeHandle | null = null
+    const cameraTrack = camera?.getVideoTracks()[0] ?? null
+    if (screenTrack && cameraTrack && spec.cameraBubble) {
+      compositor = await createCameraBubbleTrack(screenTrack, cameraTrack, spec.cameraBubble)
+    }
+    const videoTrack = compositor?.track ?? screenTrack ?? cameraTrack
+
+    // Single audio source: raw track, no AudioContext (also avoids recording
+    // silence from a suspended context on programmatic starts).
+    let mixedAudioTracks: MediaStreamTrack[]
+    let ctx: AudioContext | null = null
+    if (audioTracks.length <= 1) {
+      mixedAudioTracks = audioTracks
+    } else {
+      ctx = new AudioContext()
+      const dest = ctx.createMediaStreamDestination()
+      audioSources.forEach((s) => ctx!.createMediaStreamSource(s).connect(dest))
+      if (ctx.state === 'suspended') await ctx.resume().catch(() => {})
+      mixedAudioTracks = dest.stream.getAudioTracks()
+    }
+
+    if (mixedAudioTracks.length === 0 && !videoTrack) {
+      throw new Error('meetcap: nothing to capture — every input in the capture spec is off')
+    }
+    const mixed = new MediaStream([...mixedAudioTracks, ...(videoTrack ? [videoTrack] : [])])
+
+    return {
+      mixed,
+      hasSystemAudio,
+      videoSource: screenTrack ? 'screen' : videoTrack ? 'camera' : null,
+      cleanup: () => {
+        compositor?.stop()
+        stopOwned()
+        if (ctx) void ctx.close()
+      },
+    }
+  } catch (err) {
+    stopOwned()
+    throw err
   }
 }
 
@@ -163,8 +273,8 @@ const electronBackend: CaptureBackend<StartOptions, CloseRecordingResult, Record
     if (!isBridgeAvailable()) return Promise.resolve(null)
     return window.meetcap.mediaAccess()
   },
-  needsCamera: (opts) => opts.video === 'camera',
-  acquire: (opts) => buildMixedStream(opts.video),
+  needsCamera: (opts) => resolveCaptureSpec(opts).camera,
+  acquire: (opts) => buildMixedStream(opts),
   store: bridgeStore,
   buildResult: ({ closed, durationMs, mimeType, hasSystemAudio, videoSource, meeting }) => ({
     filePath: closed?.filePath ?? null,

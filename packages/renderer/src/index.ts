@@ -31,7 +31,12 @@ export {
   type RecorderState,
   type CreateRecorderOptions,
   type StartOptions,
+  type CaptureSpec,
+  resolveCaptureSpec,
   type RecordingChunk,
+  createCameraBubbleTrack,
+  type CameraBubbleOptions,
+  type CompositeHandle,
 } from './recorder'
 // Shared engine surface (errors + pure utils) — re-exported from meetcap-capture
 // so existing meetcap-renderer imports keep working unchanged.

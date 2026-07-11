@@ -61,8 +61,8 @@ describe('buildFilename', () => {
       'meetcap-Microsoft-Teams-2026-06-17T14-30-45.webm',
     )
   })
-  it('falls back to "meeting" with no meeting and honors a custom prefix', () => {
-    expect(buildFilename(null, date, 'rec')).toBe('rec-meeting-2026-06-17T14-30-45.webm')
+  it('omits the app segment with no meeting and honors a custom prefix', () => {
+    expect(buildFilename(null, date, 'rec')).toBe('rec-2026-06-17T14-30-45.webm')
   })
 })
 
